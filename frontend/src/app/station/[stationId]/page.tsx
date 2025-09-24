@@ -208,7 +208,9 @@ export default function StationPage(props: StationPageProps) {
               fontWeight: selectedTab === 'overview' ? 600 : 400,
               userSelect: 'none',
               background: 'none',
-              border: 'none',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
               cursor: 'pointer',
             }}
             tabIndex={0}
@@ -226,7 +228,9 @@ export default function StationPage(props: StationPageProps) {
               fontWeight: selectedTab === 'public' ? 600 : 400,
               userSelect: 'none',
               background: 'none',
-              border: 'none',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
               cursor: 'pointer',
             }}
             tabIndex={0}
@@ -244,7 +248,9 @@ export default function StationPage(props: StationPageProps) {
               fontWeight: selectedTab === 'status' ? 600 : 400,
               userSelect: 'none',
               background: 'none',
-              border: 'none',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
               cursor: 'pointer',
             }}
             tabIndex={0}
@@ -262,7 +268,9 @@ export default function StationPage(props: StationPageProps) {
               fontWeight: selectedTab === 'measurements' ? 600 : 400,
               userSelect: 'none',
               background: 'none',
-              border: 'none',
+              borderTop: 'none',
+              borderLeft: 'none',
+              borderRight: 'none',
               cursor: 'pointer',
             }}
             tabIndex={0}
