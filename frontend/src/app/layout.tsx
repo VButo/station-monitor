@@ -43,7 +43,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         setUser(null);
         
         // If we're on a protected route and user fetch fails, redirect to login
-        const protectedRoutes = ['/network', '/overview', '/advanced', '/station'];
+        const protectedRoutes = ['/simple', '/overview', '/advanced', '/station'];
         const isProtectedRoute = protectedRoutes.some(route => 
           pathname.startsWith(route)
         );
@@ -76,7 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     }
   };
 
-  const isFullPage = pathname === '/station' || pathname === '/login' || pathname === '/network' || pathname === '/overview';
+  const isFullPage = pathname === '/station' || pathname === '/login' || pathname === '/simple' || pathname === '/overview';
 
   if (loading) {
     return (
@@ -240,8 +240,8 @@ function MenuLinks({
       <Link href="/overview" className={linkClass('/overview')} onClick={onClickLink}>
         Overview
       </Link>
-      <Link href="/network" className={linkClass('/network')} onClick={onClickLink}>
-        Network
+      <Link href="/simple" className={linkClass('/simple')} onClick={onClickLink}>
+        Simple
       </Link>
       <Link href="/station/1" className={linkClass('/station', true)} onClick={onClickLink}>
         Station view

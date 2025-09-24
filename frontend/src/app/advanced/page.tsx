@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import api from '@/utils/api';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -16,8 +16,47 @@ import {
 import { AdvancedStationData } from '@/types/station';
 import TimelineCell from '@/components/TimelineCell';
 import { useRouter } from 'next/navigation';
+import * as ExcelJS from 'exceljs';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
+
+// Three-state checkbox component
+interface ThreeStateCheckboxProps {
+  state: 'all' | 'some' | 'none';
+  onChange: (checked: boolean) => void;
+  className?: string;
+}
+
+const ThreeStateCheckbox: React.FC<ThreeStateCheckboxProps> = ({ state, onChange, className = '' }) => {
+  const checkboxRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (checkboxRef.current) {
+      checkboxRef.current.indeterminate = state === 'some';
+    }
+  }, [state]);
+
+  return (
+    <input
+      ref={checkboxRef}
+      type="checkbox"
+      checked={state === 'all'}
+      onChange={(e) => onChange(e.target.checked)}
+      className={`rounded border-gray-300 transition-opacity duration-200 ${className}`}
+      style={{
+        opacity: state === 'some' ? 0.6 : 1,
+        filter: state === 'some' ? 'saturate(0.7)' : 'none',
+      }}
+      title={
+        state === 'all' 
+          ? 'All items selected' 
+          : state === 'some' 
+          ? 'Some items selected' 
+          : 'No items selected'
+      }
+    />
+  );
+};
 
 export default function AdvancedPage() {
   return (
@@ -46,8 +85,8 @@ function AdvancedPageContent() {
   const [isFiltered, setIsFiltered] = useState(false);
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set([
-    // Default basic columns that are always selected
-    'label_id', 'label_name', 'label_type', 'avg_fetch_health_24h'
+    // Default basic columns (excluding always pinned columns: ID, Name, Type)
+    'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg'
   ]));
   const [isProcessingColumns, setIsProcessingColumns] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -58,6 +97,17 @@ function AdvancedPageContent() {
   const [selectedType, setSelectedType] = useState('');
   const [healthFilter, setHealthFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Accordion state for column groups
+  const [expandedGroup, setExpandedGroup] = useState<string>('station');
+  
+  // Export dropdown state
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  
+  // Refs for column dropdown to handle click outside
+  const desktopDropdownRef = useRef<HTMLDivElement>(null);
+  const mobileDropdownRef = useRef<HTMLDivElement>(null);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   const router = useRouter();
 
@@ -110,6 +160,151 @@ function AdvancedPageContent() {
     }
   };
 
+  // Export functions - exports current view with applied filters, sorts, and visible columns
+  const exportToCSV = () => {
+    if (!gridApi) return;
+    
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filterInfo = isFiltered ? 'filtered' : 'all';
+    const filename = `station-monitor-${filterInfo}-data-${timestamp}.csv`;
+    
+    // Export with current filters and sorting applied
+    gridApi.exportDataAsCsv({
+      fileName: filename,
+      onlySelected: false, // Export all filtered data
+      skipColumnHeaders: false
+    });
+  };
+
+  const exportToExcel = async () => {
+    if (!gridApi) return;
+    
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filterInfo = isFiltered ? 'filtered' : 'all';
+    const filename = `station-monitor-${filterInfo}-data-${timestamp}.xlsx`;
+    
+    // Get filtered and sorted data from AG-Grid
+    const rowData: AdvancedStationData[] = [];
+    gridApi.forEachNodeAfterFilterAndSort((node) => {
+      if (node.data) {
+        rowData.push(node.data as AdvancedStationData);
+      }
+    });
+    
+    if (rowData.length === 0) {
+      alert('No data to export');
+      return;
+    }
+    
+    // Helper to get nested value from object by path
+    function getNestedValue(obj: unknown, path: string[]): unknown {
+      let current = obj;
+      for (const key of path) {
+        if (current && typeof current === 'object' && key in (current as Record<string, unknown>)) {
+          current = (current as Record<string, unknown>)[key];
+        } else {
+          return undefined;
+        }
+      }
+      return current;
+    }
+
+    // Get visible column definitions to determine what to export
+    const visibleColumns = gridApi.getColumnDefs()?.filter(col => {
+      // Type guard to check if it's a ColDef (not ColGroupDef)
+      if ('field' in col && col.field) {
+        const column = gridApi.getColumn(col.field);
+        return column?.isVisible();
+      }
+      return false;
+    }) || [];
+    
+    // Create export data with only visible columns
+    const exportData = rowData.map(row => {
+      const exportRow: Record<string, unknown> = {};
+      visibleColumns.forEach(colDef => {
+        // Type guard to ensure we have a ColDef with field
+        if ('field' in colDef && colDef.field) {
+          const field = colDef.field;
+          const headerName = colDef.headerName || field;
+          
+          // Handle nested properties (like public_data.temperature)
+          let value: unknown;
+          if (field.includes('.')) {
+            // Use helper function to navigate nested object path safely
+            const parts = field.split('.');
+            value = getNestedValue(row, parts);
+          } else {
+            value = (row as unknown as Record<string, unknown>)[field];
+          }
+          
+          // Convert arrays to readable strings (like hourly_status)
+          if (Array.isArray(value)) {
+            value = value.join(', ');
+          }
+          
+          exportRow[headerName] = value;
+        }
+      });
+      return exportRow;
+    });
+    
+    try {
+      // Create workbook and worksheet using ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Station Data');
+      
+      // Add headers
+      const headers = Object.keys(exportData[0] || {});
+      worksheet.addRow(headers);
+      
+      // Style headers
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE3F2FD' }
+      };
+      
+      // Add data rows
+      exportData.forEach(row => {
+        const values = headers.map(header => row[header]);
+        worksheet.addRow(values);
+      });
+      
+      // Auto-fit columns
+      worksheet.columns.forEach((column, index) => {
+        const header = headers[index];
+        const maxLength = Math.max(
+          header?.length || 0,
+          15 // minimum width
+        );
+        column.width = Math.min(maxLength * 1.2, 50); // max width of 50
+      });
+      
+      // Generate buffer and download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      alert('Error exporting to Excel. Please try CSV export instead.');
+    }
+  };
+
   // Load data on component mount and set up auto-refresh
   useEffect(() => {
     // Initial load
@@ -132,22 +327,42 @@ function AdvancedPageContent() {
   // Close column selector when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      
+      // Handle column selector dropdown
       if (showColumnSelector) {
-        const target = event.target as Element;
-        if (!target.closest('.column-selector-container')) {
+        const desktopDropdown = desktopDropdownRef.current;
+        const mobileDropdown = mobileDropdownRef.current;
+        
+        // Check if click is outside both the button and the dropdown (both desktop and mobile)
+        const isOutsideDropdowns = !desktopDropdown?.contains(target) && !mobileDropdown?.contains(target);
+        const isOutsideButton = !target.closest('.column-selector-container');
+        
+        if (isOutsideDropdowns && isOutsideButton) {
           setShowColumnSelector(false);
+        }
+      }
+      
+      // Handle export dropdown
+      if (showExportDropdown) {
+        const exportDropdown = exportDropdownRef.current;
+        const isOutsideExportDropdown = !exportDropdown?.contains(target);
+        const isOutsideExportButton = !target.closest('.export-dropdown-container');
+        
+        if (isOutsideExportDropdown && isOutsideExportButton) {
+          setShowExportDropdown(false);
         }
       }
     };
 
-    if (showColumnSelector) {
+    if (showColumnSelector || showExportDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showColumnSelector]);
+  }, [showColumnSelector, showExportDropdown]);
 
   // Generate dynamic column definitions based on selected columns only
   const columnDefs = useMemo((): ColDef[] => {
@@ -167,48 +382,56 @@ function AdvancedPageContent() {
 
     const columns: ColDef[] = [];
 
-    // Always include basic station info if selected
-    if (selectedColumns.has('label_id')) {
-      columns.push({
-        headerName: 'ID',
-        field: 'label_id',
-        pinned: 'left',
-        minWidth: 80,
-        maxWidth: 100,
-        cellStyle: { fontWeight: '600' },
-        filter: 'agNumberColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
-        }
-      });
-    }
+    // Always include these basic station info columns (pinned left, not configurable)
+    columns.push({
+      headerName: 'ID',
+      field: 'label_id',
+      pinned: 'left',
+      minWidth: 80,
+      maxWidth: 100,
+      cellStyle: { fontWeight: '600' },
+      filter: 'agNumberColumnFilter',
+      filterParams: {
+        buttons: ['reset', 'apply'],
+      }
+    });
 
-    if (selectedColumns.has('label_name')) {
+    columns.push({
+      headerName: 'Name',
+      field: 'label_name',
+      pinned: 'left',
+      minWidth: 200,
+      flex: 1,
+      cellStyle: { fontWeight: '600', fontSize: '16px' },
+      filter: 'agTextColumnFilter',
+      filterParams: {
+        buttons: ['reset', 'apply'],
+        debounceMs: 300,
+      }
+    });
+
+    columns.push({
+      headerName: 'Type',
+      field: 'label_type',
+      pinned: 'left',
+      minWidth: 100,
+      maxWidth: 120,
+      filter: 'agTextColumnFilter',
+      filterParams: {
+        buttons: ['reset', 'apply'],
+      }
+    });
+
+    // Add configurable station info columns if selected
+    if (selectedColumns.has('label')) {
       columns.push({
-        headerName: 'Station Name',
-        field: 'label_name',
-        pinned: 'left',
-        minWidth: 200,
-        flex: 1,
-        cellStyle: { fontWeight: '600', fontSize: '16px' },
+        headerName: 'Label',
+        field: 'label',
+        minWidth: 150,
         filter: 'agTextColumnFilter',
         filterParams: {
           buttons: ['reset', 'apply'],
           debounceMs: 300,
-        }
-      });
-    }
-
-    if (selectedColumns.has('label_type')) {
-      columns.push({
-        headerName: 'Type',
-        field: 'label_type',
-        pinned: 'left',
-        minWidth: 100,
-        maxWidth: 120,
-        filter: 'agTextColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
         }
       });
     }
@@ -253,7 +476,7 @@ function AdvancedPageContent() {
       });
     }
 
-    if (selectedColumns.has('ip')) {
+    if (selectedColumns.has('ip_address')) {
       columns.push({
         headerName: 'IP Address',
         field: 'ip',
@@ -265,10 +488,22 @@ function AdvancedPageContent() {
       });
     }
 
-    // Add health/status columns if selected
-    if (selectedColumns.has('avg_fetch_health_24h')) {
+    if (selectedColumns.has('sms_number')) {
       columns.push({
-        headerName: 'Online (24h)',
+        headerName: 'SMS Number',
+        field: 'sms_number',
+        minWidth: 150,
+        filter: 'agTextColumnFilter',
+        filterParams: {
+          buttons: ['reset', 'apply'],
+        }
+      });
+    }
+
+    // Add health/status columns if selected
+    if (selectedColumns.has('online_24h_avg')) {
+      columns.push({
+        headerName: 'Online_24h_Avg',
         field: 'avg_fetch_health_24h',
         minWidth: 120,
         maxWidth: 150,
@@ -280,9 +515,9 @@ function AdvancedPageContent() {
       });
     }
 
-    if (selectedColumns.has('avg_fetch_health_7d')) {
+    if (selectedColumns.has('online_7d_avg')) {
       columns.push({
-        headerName: 'Online (7d)',
+        headerName: 'Online_7d_Avg',
         field: 'avg_fetch_health_7d',
         minWidth: 120,
         maxWidth: 150,
@@ -294,37 +529,9 @@ function AdvancedPageContent() {
       });
     }
 
-    if (selectedColumns.has('avg_data_health_24h')) {
+    if (selectedColumns.has('online_24h_graph')) {
       columns.push({
-        headerName: 'Health (24h)',
-        field: 'avg_data_health_24h',
-        minWidth: 130,
-        maxWidth: 160,
-        valueFormatter: params => params.value != null ? `${params.value}%` : '',
-        filter: 'agNumberColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
-        }
-      });
-    }
-
-    if (selectedColumns.has('avg_data_health_7d')) {
-      columns.push({
-        headerName: 'Health (7d)',
-        field: 'avg_data_health_7d',
-        minWidth: 130,
-        maxWidth: 160,
-        valueFormatter: params => params.value != null ? `${params.value}%` : '',
-        filter: 'agNumberColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
-        }
-      });
-    }
-
-    if (selectedColumns.has('hourly_status')) {
-      columns.push({
-        headerName: 'Status Timeline (24h)',
+        headerName: 'Online_24h_Graph',
         field: 'hourly_status',
         cellRenderer: TimelineCell,
         cellRendererParams: (params: { data?: AdvancedStationData }) => ({
@@ -336,11 +543,34 @@ function AdvancedPageContent() {
       });
     }
 
-    if (selectedColumns.has('total_measurements')) {
+    if (selectedColumns.has('online_last_seen')) {
       columns.push({
-        headerName: 'Total Measurements',
-        field: 'total_measurements',
-        minWidth: 150,
+        headerName: 'Online_Last_Seen',
+        field: 'last_updated',
+        minWidth: 160,
+        valueFormatter: params => {
+          if (!params.value) return '';
+          const date = new Date(params.value);
+          return date.toLocaleString();
+        },
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          buttons: ['reset', 'apply'],
+          comparator: (filterDate: Date, cellValue: string) => {
+            const cellDate = new Date(cellValue);
+            return cellDate.getTime() - filterDate.getTime();
+          }
+        }
+      });
+    }
+
+    if (selectedColumns.has('data_health_24h_avg')) {
+      columns.push({
+        headerName: 'Data_Health_24h_Avg',
+        field: 'avg_data_health_24h',
+        minWidth: 130,
+        maxWidth: 170,
+        valueFormatter: params => params.value != null ? `${params.value}%` : '',
         filter: 'agNumberColumnFilter',
         filterParams: {
           buttons: ['reset', 'apply'],
@@ -348,22 +578,16 @@ function AdvancedPageContent() {
       });
     }
 
-    if (selectedColumns.has('last_updated')) {
+    if (selectedColumns.has('data_health_7d_avg')) {
       columns.push({
-        headerName: 'Last Updated',
-        field: 'last_updated',
-        minWidth: 180,
-        valueFormatter: params => params.value ? new Date(params.value).toLocaleString() : '',
-        filter: 'agDateColumnFilter',
+        headerName: 'Data_Health_7d_Avg',
+        field: 'avg_data_health_7d',
+        minWidth: 130,
+        maxWidth: 170,
+        valueFormatter: params => params.value != null ? `${params.value}%` : '',
+        filter: 'agNumberColumnFilter',
         filterParams: {
           buttons: ['reset', 'apply'],
-          comparator: (filterLocalDateAtMidnight: Date, cellValue: string) => {
-            if (cellValue == null) return -1;
-            const cellDate = new Date(cellValue);
-            if (cellDate < filterLocalDateAtMidnight) return -1;
-            if (cellDate > filterLocalDateAtMidnight) return 1;
-            return 0;
-          }
         }
       });
     }
@@ -455,17 +679,6 @@ function AdvancedPageContent() {
     updateCounts(params.api, stationData.length);
   };
 
-  const resetGrid = () => {
-    gridApi?.setFilterModel(null);
-    gridApi?.deselectAll();
-  };
-
-  const resetGridCompletely = () => {
-    gridApi?.setFilterModel(null);
-    gridApi?.deselectAll();
-    gridApi?.resetColumnState();
-  };
-
 
 
   // Show basic columns only (reset to default selection)
@@ -473,7 +686,7 @@ function AdvancedPageContent() {
     setIsProcessingColumns(true);
     console.log('Resetting to basic view');
     setSelectedColumns(new Set([
-      'label_id', 'label_name', 'label_type', 'avg_fetch_health_24h'
+      'label_id', 'label_name', 'label_type', 'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg'
     ]));
     setTimeout(() => setIsProcessingColumns(false), 100);
   };
@@ -537,11 +750,14 @@ function AdvancedPageContent() {
     let columnsToToggle: string[] = [];
     
     switch (groupName) {
-      case 'station-details':
-        columnsToToggle = ['latitude', 'longitude', 'altitude', 'ip'];
-        break;
-      case 'status-health':
-        columnsToToggle = ['avg_fetch_health_7d', 'hourly_status', 'hourly_timestamps', 'avg_data_health_24h', 'avg_data_health_7d', 'total_measurements', 'last_updated'];
+      case 'station':
+        // Exclude pinned columns (label_id, label_name, label_type) - they're always visible
+        columnsToToggle = [
+          'label', 'latitude', 'longitude', 'altitude', 
+          'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
+          'online_last_seen', 'data_health_24h_avg', 'data_health_7d_avg'
+          /* 'online_7d_graph', 'data_health_24h_graph', 'data_health_7d_graph' - commented out as requested */
+        ];
         break;
       case 'public-data':
         columnsToToggle = publicKeys.map(key => `public_data.${key}`);
@@ -569,9 +785,9 @@ function AdvancedPageContent() {
     });
   };
 
-  // Helper function to check if all columns in a group are selected
-  const isGroupVisible = (groupName: string): boolean => {
-    if (stationData.length === 0) return false;
+  // Helper function to get group selection state (fully selected, partially selected, or not selected)
+  const getGroupState = (groupName: string): 'all' | 'some' | 'none' => {
+    if (stationData.length === 0) return 'none';
 
     const publicKeys = Object.keys(columnStructure.public_data);
     const statusKeys = Object.keys(columnStructure.status_data);
@@ -579,11 +795,13 @@ function AdvancedPageContent() {
     let columnsInGroup: string[] = [];
 
     switch (groupName) {
-      case 'station-details':
-        columnsInGroup = ['latitude', 'longitude', 'altitude', 'ip'];
-        break;
-      case 'status-health':
-        columnsInGroup = ['avg_fetch_health_7d', 'hourly_status', 'hourly_timestamps', 'avg_data_health_24h', 'avg_data_health_7d', 'total_measurements', 'last_updated'];
+      case 'station':
+        // Exclude pinned columns (label_id, label_name, label_type) - they're always visible
+        columnsInGroup = [
+          'label', 'latitude', 'longitude', 'altitude', 
+          'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
+          'online_last_seen', 'data_health_24h_avg', 'data_health_7d_avg'
+        ];
         break;
       case 'public-data':
         columnsInGroup = publicKeys.map(key => `public_data.${key}`);
@@ -596,11 +814,38 @@ function AdvancedPageContent() {
         break;
     }
 
-    return columnsInGroup.length > 0 && columnsInGroup.every(colId => selectedColumns.has(colId));
+    if (columnsInGroup.length === 0) return 'none';
+    
+    const selectedCount = columnsInGroup.filter(colId => selectedColumns.has(colId)).length;
+    
+    if (selectedCount === columnsInGroup.length) return 'all';
+    if (selectedCount > 0) return 'some';
+    return 'none';
   };
 
   const toggleColumnSelector = () => {
     setShowColumnSelector(!showColumnSelector);
+  };
+
+  // Handle group expansion/collapse
+  const handleGroupClick = (groupName: string) => {
+    const isOpening = expandedGroup !== groupName;
+    setExpandedGroup(expandedGroup === groupName ? '' : groupName);
+    
+    // Reset scroll position to top when opening a group
+    if (isOpening) {
+      // Reset scroll for desktop dropdown
+      const desktopScrollContainer = desktopDropdownRef.current?.querySelector('.flex-1.overflow-y-auto');
+      if (desktopScrollContainer) {
+        desktopScrollContainer.scrollTop = 0;
+      }
+      
+      // Reset scroll for mobile dropdown  
+      const mobileScrollContainer = mobileDropdownRef.current?.querySelector('.overflow-hidden');
+      if (mobileScrollContainer) {
+        mobileScrollContainer.scrollTop = 0;
+      }
+    }
   };
 
   // Filter functions
@@ -674,7 +919,7 @@ function AdvancedPageContent() {
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-gray-900">Advanced Station Data</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Advanced View</h1>
             <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
               {loading ? '...' : stationData.length}
             </span>
@@ -736,169 +981,50 @@ function AdvancedPageContent() {
             onClick={toggleColumnSelector}
             className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm flex items-center gap-2"
           >
-            Column Groups ▼
+            Columns ▼
           </button>
+        </div>
 
-          {showColumnSelector && (
-            <div className="absolute top-full left-0 mt-2 w-80 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-96 overflow-y-auto">
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 className="font-medium text-gray-900">Column Visibility</h3>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setShowColumnSelector(false);
-                  }}
-                  className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-                >
-                  ×
-                </button>
-              </div>
-              
-              <div className="p-4 space-y-4">
-                {/* Station Details Group */}
-                <div>
-                  <label className="flex items-center space-x-2 font-medium text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isGroupVisible('station-details')}
-                      onChange={(e) => toggleColumnGroup('station-details', e.target.checked)}
-                      className="rounded border-gray-300"
-                    />
-                    <span>📍 Station Details</span>
-                  </label>
-                  <div className="ml-6 space-y-1">
-                    {['latitude', 'longitude', 'altitude', 'ip'].map(colId => (
-                      <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={selectedColumns.has(colId)}
-                          onChange={(e) => toggleColumnVisibility(colId, e.target.checked)}
-                          className="rounded border-gray-300"
-                        />
-                        <span>{colId}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Status & Health Group */}
-                <div>
-                  <label className="flex items-center space-x-2 font-medium text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isGroupVisible('status-health')}
-                      onChange={(e) => toggleColumnGroup('status-health', e.target.checked)}
-                      className="rounded border-gray-300"
-                    />
-                    <span>💚 Status & Health</span>
-                  </label>
-                  <div className="ml-6 space-y-1">
-                    {['avg_fetch_health_7d', 'hourly_status', 'avg_data_health_24h', 'avg_data_health_7d', 'total_measurements', 'last_updated'].map(colId => (
-                      <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600">
-                        <input
-                          type="checkbox"
-                          checked={selectedColumns.has(colId)}
-                          onChange={(e) => toggleColumnVisibility(colId, e.target.checked)}
-                          className="rounded border-gray-300"
-                        />
-                        <span>{colId.replace(/_/g, ' ')}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Dynamic Groups */}
-                {stationData.length > 0 && Object.keys(columnStructure.public_data).length > 0 && (
-                  <div>
-                    <label className="flex items-center space-x-2 font-medium text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isGroupVisible('public-data')}
-                        onChange={(e) => toggleColumnGroup('public-data', e.target.checked)}
-                        className="rounded border-gray-300"
-                      />
-                      <span>🌐 Public Data ({Object.keys(columnStructure.public_data).length})</span>
-                    </label>
-                    <div className="ml-6 space-y-1 max-h-32 overflow-y-auto">
-                      {Object.keys(columnStructure.public_data).map(key => {
-                        const colId = `public_data.${key}`;
-                        return (
-                          <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600">
-                            <input
-                              type="checkbox"
-                              checked={selectedColumns.has(colId)}
-                              onChange={(e) => toggleColumnVisibility(colId, e.target.checked)}
-                              className="rounded border-gray-300"
-                            />
-                            <span>{key}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {stationData.length > 0 && Object.keys(columnStructure.status_data).length > 0 && (
-                  <div>
-                    <label className="flex items-center space-x-2 font-medium text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isGroupVisible('status-data')}
-                        onChange={(e) => toggleColumnGroup('status-data', e.target.checked)}
-                        className="rounded border-gray-300"
-                      />
-                      <span>📊 Status Data ({Object.keys(columnStructure.status_data).length})</span>
-                    </label>
-                    <div className="ml-6 space-y-1 max-h-32 overflow-y-auto">
-                      {Object.keys(columnStructure.status_data).map(key => {
-                        const colId = `status_data.${key}`;
-                        return (
-                          <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600">
-                            <input
-                              type="checkbox"
-                              checked={selectedColumns.has(colId)}
-                              onChange={(e) => toggleColumnVisibility(colId, e.target.checked)}
-                              className="rounded border-gray-300"
-                            />
-                            <span>{key}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {stationData.length > 0 && Object.keys(columnStructure.measurements_data).length > 0 && (
-                  <div>
-                    <label className="flex items-center space-x-2 font-medium text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isGroupVisible('measurements')}
-                        onChange={(e) => toggleColumnGroup('measurements', e.target.checked)}
-                        className="rounded border-gray-300"
-                      />
-                      <span>📈 Measurements ({Object.keys(columnStructure.measurements_data).length})</span>
-                    </label>
-                    <div className="ml-6 space-y-1 max-h-32 overflow-y-auto">
-                      {Object.keys(columnStructure.measurements_data).map(key => {
-                        const colId = `measurements_data.${key}`;
-                        return (
-                          <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600">
-                            <input
-                              type="checkbox"
-                              checked={selectedColumns.has(colId)}
-                              onChange={(e) => toggleColumnVisibility(colId, e.target.checked)}
-                              className="rounded border-gray-300"
-                            />
-                            <span>{key}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+        {/* Export Dropdown */}
+        <div className="relative export-dropdown-container">
+          <button
+            onClick={() => setShowExportDropdown(!showExportDropdown)}
+            disabled={!gridApi || stationData.length === 0}
+            className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm flex items-center gap-2"
+            title="Export filtered data"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Export ▼
+          </button>
+          
+          {showExportDropdown && (
+            <div ref={exportDropdownRef} className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+              <button
+                onClick={() => {
+                  exportToCSV();
+                  setShowExportDropdown(false);
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-700 border-b border-gray-100"
+              >
+                <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export as CSV
+              </button>
+              <button
+                onClick={() => {
+                  exportToExcel();
+                  setShowExportDropdown(false);
+                }}
+                className="w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 text-sm text-gray-700"
+              >
+                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Export as Excel
+              </button>
             </div>
           )}
         </div>
@@ -1004,50 +1130,548 @@ function AdvancedPageContent() {
         </div>
       ) : (
         <>
-          <div className="ag-theme-alpine" style={{ height: '600px', width: '100%' }}>
-            <AgGridReact
-              columnDefs={columnDefs}
-              rowData={filteredData}
-              onGridReady={onGridReady}
-              onModelUpdated={onModelUpdated}
-              onFilterChanged={onFilterChanged}
-              //enableRangeSelection={true}
-              animateRows={false}
-              onRowClicked={(event) => {
-                const id = event.data.id;
-                console.log('Row clicked, station ID:', id);
-                handleRowClick(id);
-              }}
-              suppressMenuHide={true}
-              rowSelection="multiple"
-              // Filtering configuration
-              defaultColDef={{
-                filter: true,
-                sortable: true,
-                resizable: true,
-                floatingFilter: true,
-              }}
-              suppressRowClickSelection={true}
-              enableBrowserTooltips={true}
-            />
+          {/* Desktop Sidebar + Table Layout */}
+          <div className={`hidden lg:flex gap-4 ${showColumnSelector ? '' : 'block'}`}>
+            {/* Desktop Column Selector Sidebar */}
+            {showColumnSelector && (
+              <div ref={desktopDropdownRef} className="w-95 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden flex flex-col" style={{ height: '600px' }}>
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                  <h3 className="font-medium text-gray-900">Column Visibility</h3>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setShowColumnSelector(false);
+                    }}
+                    className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto">
+                  {/* Station Group */}
+                  <div className="border-b border-gray-200">
+                    <button
+                      onClick={(e) => {
+                        // Prevent group toggle if clicking on checkbox
+                        if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                          return;
+                        }
+                        handleGroupClick('station');
+                      }}
+                      className="w-full p-4 text-left hover:bg-gray-50 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="text-gray-400">
+                          {expandedGroup === 'station' ? '▼' : '▶'}
+                        </span>
+                        <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                          <ThreeStateCheckbox
+                            state={getGroupState('station')}
+                            onChange={(checked) => {
+                              toggleColumnGroup('station', checked);
+                            }}
+                          />
+                        </div>
+                        <span className="font-medium text-gray-700">🏢 Station</span>
+                      </div>
+                    </button>
+                    {expandedGroup === 'station' && (
+                      <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                        {/* Note: ID, Name, and Type are always pinned left and not configurable */}
+                        {[
+                          { id: 'label', label: 'Label' },
+                          { id: 'latitude', label: 'Latitude' },
+                          { id: 'longitude', label: 'Longitude' },
+                          { id: 'altitude', label: 'Altitude' },
+                          { id: 'ip_address', label: 'IP Address' },
+                          { id: 'sms_number', label: 'SMS Number' },
+                          { id: 'online_24h_avg', label: 'Online 24h Avg' },
+                          { id: 'online_7d_avg', label: 'Online 7d Avg' },
+                          { id: 'online_24h_graph', label: 'Online 24h Graph' },
+                          { id: 'online_last_seen', label: 'Online Last Seen' },
+                          { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
+                          { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
+                        ].map(({ id, label }) => (
+                          <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.has(id)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                toggleColumnVisibility(id, e.target.checked);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Public Data Group */}
+                  {stationData.length > 0 && Object.keys(columnStructure.public_data).length > 0 && (
+                    <div className="border-b border-gray-200">
+                      <button
+                        onClick={(e) => {
+                          // Prevent group toggle if clicking on checkbox
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('public-data');
+                        }}
+                        className="w-full p-4 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {expandedGroup === 'public-data' ? '▼' : '▶'}
+                          </span>
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('public-data')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('public-data', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">🌐 Public Data ({Object.keys(columnStructure.public_data).length})</span>
+                        </div>
+                      </button>
+                      {expandedGroup === 'public-data' && (
+                        <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                          {Object.keys(columnStructure.public_data).map(key => {
+                            const colId = `public_data.${key}`;
+                            return (
+                              <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedColumns.has(colId)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleColumnVisibility(colId, e.target.checked);
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                <span>{key}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Status Data Group */}
+                  {stationData.length > 0 && Object.keys(columnStructure.status_data).length > 0 && (
+                    <div className="border-b border-gray-200">
+                      <button
+                        onClick={(e) => {
+                          // Prevent group toggle if clicking on checkbox
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('status-data');
+                        }}
+                        className="w-full p-4 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {expandedGroup === 'status-data' ? '▼' : '▶'}
+                          </span>
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('status-data')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('status-data', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">📊 Status Data ({Object.keys(columnStructure.status_data).length})</span>
+                        </div>
+                      </button>
+                      {expandedGroup === 'status-data' && (
+                        <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                          {Object.keys(columnStructure.status_data).map(key => {
+                            const colId = `status_data.${key}`;
+                            return (
+                              <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedColumns.has(colId)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleColumnVisibility(colId, e.target.checked);
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                <span>{key}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Measurements Group */}
+                  {stationData.length > 0 && Object.keys(columnStructure.measurements_data).length > 0 && (
+                    <div className="border-b border-gray-200">
+                      <button
+                        onClick={(e) => {
+                          // Prevent group toggle if clicking on checkbox
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('measurements');
+                        }}
+                        className="w-full p-4 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {expandedGroup === 'measurements' ? '▼' : '▶'}
+                          </span>
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('measurements')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('measurements', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">📈 Measurements ({Object.keys(columnStructure.measurements_data).length})</span>
+                        </div>
+                      </button>
+                      {expandedGroup === 'measurements' && (
+                        <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                          {Object.keys(columnStructure.measurements_data).map(key => {
+                            const colId = `measurements_data.${key}`;
+                            return (
+                              <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedColumns.has(colId)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleColumnVisibility(colId, e.target.checked);
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                <span>{key}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Desktop Table */}
+            <div className="flex-1 ag-theme-alpine" style={{ height: '600px' }}>
+              <AgGridReact
+                columnDefs={columnDefs}
+                rowData={filteredData}
+                onGridReady={onGridReady}
+                onModelUpdated={onModelUpdated}
+                onFilterChanged={onFilterChanged}
+                animateRows={false}
+                onRowClicked={(event) => {
+                  const id = event.data.id;
+                  console.log('Row clicked, station ID:', id);
+                  handleRowClick(id);
+                }}
+                suppressMenuHide={true}
+                rowSelection="multiple"
+                defaultColDef={{
+                  filter: true,
+                  sortable: true,
+                  resizable: true,
+                  floatingFilter: true,
+                }}
+                suppressRowClickSelection={true}
+                enableBrowserTooltips={true}
+              />
+            </div>
+          </div>
+
+          {/* Mobile Overlay Layout */}
+          <div className="lg:hidden">
+            {/* Mobile Column Selector Overlay */}
+            {showColumnSelector && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                <div ref={mobileDropdownRef} className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden">
+                  <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                    <h3 className="font-medium text-gray-900">Column Visibility</h3>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setShowColumnSelector(false);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  
+                  <div className="overflow-hidden">
+                    {/* Station Group */}
+                    <div className="border-b border-gray-200">
+                      <button
+                        onClick={(e) => {
+                          // Prevent group toggle if clicking on checkbox
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('station');
+                        }}
+                        className="w-full p-3 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('station')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('station', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">🏢 Station</span>
+                        </div>
+                        <span className="text-gray-400">
+                          {expandedGroup === 'station' ? '▲' : '▼'}
+                        </span>
+                      </button>
+                      {expandedGroup === 'station' && (
+                        <div
+                          className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto"
+                        >
+                          {/* Note: ID, Name, and Type are always pinned left and not configurable */}
+                          {[
+                            { id: 'label', label: 'Label' },
+                            { id: 'latitude', label: 'Latitude' },
+                            { id: 'longitude', label: 'Longitude' },
+                            { id: 'altitude', label: 'Altitude' },
+                            { id: 'ip_address', label: 'IP Address' },
+                            { id: 'sms_number', label: 'SMS Number' },
+                            { id: 'online_24h_avg', label: 'Online 24h Avg' },
+                            { id: 'online_7d_avg', label: 'Online 7d Avg' },
+                            { id: 'online_24h_graph', label: 'Online 24h Graph' },
+                            { id: 'online_last_seen', label: 'Online Last Seen' },
+                            { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
+                            { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
+                          ].map(({ id, label }) => (
+                            <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has(id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility(id, e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Public Data Group */}
+                    {stationData.length > 0 && Object.keys(columnStructure.public_data).length > 0 && (
+                      <div className="border-b border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            // Prevent group toggle if clicking on checkbox
+                            if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                              return;
+                            }
+                            handleGroupClick('public-data');
+                          }}
+                          className="w-full p-3 text-left hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <ThreeStateCheckbox
+                                state={getGroupState('public-data')}
+                                onChange={(checked) => {
+                                  toggleColumnGroup('public-data', checked);
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-gray-700">🌐 Public Data ({Object.keys(columnStructure.public_data).length})</span>
+                          </div>
+                          <span className="text-gray-400">
+                            {expandedGroup === 'public-data' ? '▲' : '▼'}
+                          </span>
+                        </button>
+                        {expandedGroup === 'public-data' && (
+                          <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            {Object.keys(columnStructure.public_data).map(key => {
+                              const colId = `public_data.${key}`;
+                              return (
+                                <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedColumns.has(colId)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleColumnVisibility(colId, e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span>{key}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Status Data Group */}
+                    {stationData.length > 0 && Object.keys(columnStructure.status_data).length > 0 && (
+                      <div className="border-b border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            // Prevent group toggle if clicking on checkbox
+                            if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                              return;
+                            }
+                            handleGroupClick('status-data');
+                          }}
+                          className="w-full p-3 text-left hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <ThreeStateCheckbox
+                                state={getGroupState('status-data')}
+                                onChange={(checked) => {
+                                  toggleColumnGroup('status-data', checked);
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-gray-700">📊 Status Data ({Object.keys(columnStructure.status_data).length})</span>
+                          </div>
+                          <span className="text-gray-400">
+                            {expandedGroup === 'status-data' ? '▲' : '▼'}
+                          </span>
+                        </button>
+                        {expandedGroup === 'status-data' && (
+                          <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            {Object.keys(columnStructure.status_data).map(key => {
+                              const colId = `status_data.${key}`;
+                              return (
+                                <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedColumns.has(colId)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleColumnVisibility(colId, e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span>{key}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Measurements Group */}
+                    {stationData.length > 0 && Object.keys(columnStructure.measurements_data).length > 0 && (
+                      <div className="border-b border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            // Prevent group toggle if clicking on checkbox
+                            if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                              return;
+                            }
+                            handleGroupClick('measurements');
+                          }}
+                          className="w-full p-3 text-left hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <ThreeStateCheckbox
+                                state={getGroupState('measurements')}
+                                onChange={(checked) => {
+                                  toggleColumnGroup('measurements', checked);
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-gray-700">📈 Measurements ({Object.keys(columnStructure.measurements_data).length})</span>
+                          </div>
+                          <span className="text-gray-400">
+                            {expandedGroup === 'measurements' ? '▲' : '▼'}
+                          </span>
+                        </button>
+                        {expandedGroup === 'measurements' && (
+                          <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            {Object.keys(columnStructure.measurements_data).map(key => {
+                              const colId = `measurements_data.${key}`;
+                              return (
+                                <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedColumns.has(colId)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleColumnVisibility(colId, e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span>{key}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Table */}
+            <div className="ag-theme-alpine" style={{ height: '600px', width: '100%' }}>
+              <AgGridReact
+                columnDefs={columnDefs}
+                rowData={filteredData}
+                onGridReady={onGridReady}
+                onModelUpdated={onModelUpdated}
+                onFilterChanged={onFilterChanged}
+                animateRows={false}
+                onRowClicked={(event) => {
+                  const id = event.data.id;
+                  console.log('Row clicked, station ID:', id);
+                  handleRowClick(id);
+                }}
+                suppressMenuHide={true}
+                rowSelection="multiple"
+                defaultColDef={{
+                  filter: true,
+                  sortable: true,
+                  resizable: true,
+                  floatingFilter: true,
+                }}
+                suppressRowClickSelection={true}
+                enableBrowserTooltips={true}
+              />
+            </div>
           </div>
 
           {/* Footer */}
-          <div className="mt-4 flex items-center justify-between">
-            <div className="flex gap-2">
-              <button
-                onClick={resetGrid}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
-              >
-                Reset Filters
-              </button>
-              <button
-                onClick={resetGridCompletely}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
-              >
-                Reset All
-              </button>
-            </div>
+          <div className="mt-4 flex items-center justify-end">
             <p className="text-sm text-gray-600">
               Rows: {filteredCount} of {rowCount} {isFiltered && '(Filtered)'}
             </p>

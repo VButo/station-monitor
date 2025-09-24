@@ -56,6 +56,7 @@ export interface CollectorDataKeyValue {
 export interface AdvancedStationData {
   // Basic station info (always visible)
   id: number
+  label: string
   label_id: string
   label_name: string
   label_type: string
@@ -63,6 +64,7 @@ export interface AdvancedStationData {
   longitude?: number
   altitude?: number
   ip: string
+  sms_number?: string
   
   // Status data (mostly hidden by default)
   avg_fetch_health_7d: number

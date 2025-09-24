@@ -181,6 +181,7 @@ export async function fetchAdvancedStationData() {
           return {
             // Basic station info
             id: station.id,
+            label: station.label,
             label_id: station.label_id,
             label_name: station.label_name,
             label_type: station.label_type,
@@ -188,6 +189,7 @@ export async function fetchAdvancedStationData() {
             longitude: station.longitude,
             altitude: station.altitude,
             ip: station.ip,
+            sms_number: station.sms_number,
             
             // Status data
             avg_fetch_health_7d: avgStatus?.avg_fetch_health_7d || 0,
@@ -212,6 +214,7 @@ export async function fetchAdvancedStationData() {
           // Return basic station data even if table data fails
           return {
             id: station.id,
+            label: station.label,
             label_id: station.label_id,
             label_name: station.label_name,
             label_type: station.label_type,
@@ -219,8 +222,11 @@ export async function fetchAdvancedStationData() {
             longitude: station.longitude,
             altitude: station.altitude,
             ip: station.ip,
+            sms_number: station.sms_number,
             avg_fetch_health_7d: 0,
+            avg_data_health_7d: 0,
             avg_fetch_health_24h: 0,
+            avg_data_health_24h: 0,
             hourly_status: [],
             public_data: {},
             status_data: {},
