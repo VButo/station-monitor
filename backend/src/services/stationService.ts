@@ -104,6 +104,93 @@ export async function getMeasurementsTable(id: number) {
   }
 }
 
+// New datetime-enabled table functions
+export async function getPublicTableWithDatetime(id: number, datetime: Date) {
+  try {
+    console.log(`Attempting to fetch public table for station ${id} at ${datetime.toISOString()}`);
+    
+    // Calculate start datetime (10 minutes before the provided datetime)
+    const endDatetime = new Date(datetime);
+    const startDatetime = new Date(datetime.getTime() - 10 * 60 * 1000); // 10 minutes before
+    
+    console.log(`Time range: ${startDatetime.toISOString()} to ${endDatetime.toISOString()}`);
+    
+    const { data, error } = await rpcClient.rpc('get_collector_data_kv_public_datetime', { 
+      _station_id: id, 
+      _start_datetime: startDatetime.toISOString(),
+      _end_datetime: endDatetime.toISOString()
+    });
+    
+    if (error) {
+      console.error(`Error fetching public table with datetime for station ${id}:`, error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+    
+    console.log(`Public table with datetime for station ${id}: ${data?.length || 0} records`);
+    return data || [];
+  } catch (err) {
+    console.error(`Failed to fetch public table with datetime for station ${id}:`, err);
+    return [];
+  }
+}
+
+export async function getStatusTableWithDatetime(id: number, datetime: Date) {
+  try {
+    console.log(`Attempting to fetch status table for station ${id} at ${datetime.toISOString()}`);
+    
+    // Calculate start datetime (10 minutes before the provided datetime)
+    const endDatetime = new Date(datetime);
+    const startDatetime = new Date(datetime.getTime() - 10 * 60 * 1000); // 10 minutes before
+    
+    console.log(`Time range: ${startDatetime.toISOString()} to ${endDatetime.toISOString()}`);
+    
+    const { data, error } = await rpcClient.rpc('get_collector_data_kv_status_datetime', { 
+      _station_id: id, 
+      _start_datetime: startDatetime.toISOString(),
+      _end_datetime: endDatetime.toISOString()
+    });
+    
+    if (error) {
+      console.error(`Error fetching status table with datetime for station ${id}:`, error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+    
+    console.log(`Status table with datetime for station ${id}: ${data?.length || 0} records`);
+    return data || [];
+  } catch (err) {
+    console.error(`Failed to fetch status table with datetime for station ${id}:`, err);
+    return [];
+  }
+}
+
+export async function getMeasurementsTableWithDatetime(id: number, datetime: Date) {
+  try {
+    console.log(`Attempting to fetch measurements table for station ${id} at ${datetime.toISOString()}`);
+    
+    // Calculate start datetime (10 minutes before the provided datetime)
+    const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
+    
+    const { data, error } = await rpcClient.rpc('get_collector_data_kv_measurements_datetime', { 
+      _station_id: id, 
+      _datetime: dateTime.toISOString()
+    });
+    
+    if (error) {
+      console.error(`Error fetching measurements table with datetime for station ${id}:`, error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+    
+    console.log(`Measurements table with datetime for station ${id}: ${data?.length || 0} records`);
+    return data || [];
+  } catch (err) {
+    console.error(`Failed to fetch measurements table with datetime for station ${id}:`, err);
+    return [];
+  }
+}
+
 export async function fetchStations() {
   const { data, error } = await supabase.from('stations').select('*');
   if (error) throw error;
@@ -201,9 +288,12 @@ export async function fetchAdvancedStationData() {
             
             // Convert key-value arrays to objects
             public_data: keyValueArrayToObject(publicData),
+            public_timestamp: publicData[0].station_timestamp,
             status_data: keyValueArrayToObject(statusData),
+            status_timestamp: statusData[0]?.station_timestamp,
             measurements_data: keyValueArrayToObject(measurementsData),
-            
+            measurements_timestamp: measurementsData[0]?.station_timestamp,
+
             // Metadata
             last_updated: new Date().toISOString(),
             total_measurements: measurementsData.length

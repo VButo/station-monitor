@@ -1,16 +1,15 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import api from '@/utils/api';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import ThreeStateCheckbox from '@/components/ThreeStateCheckbox';
 import {
   ModuleRegistry,
   AllCommunityModule,
   ColDef,
   GridReadyEvent,
-  ModelUpdatedEvent,
-  FilterChangedEvent,
   GridApi
 } from 'ag-grid-community';
 import { AdvancedStationData } from '@/types/station';
@@ -19,44 +18,6 @@ import { useRouter } from 'next/navigation';
 import * as ExcelJS from 'exceljs';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-
-// Three-state checkbox component
-interface ThreeStateCheckboxProps {
-  state: 'all' | 'some' | 'none';
-  onChange: (checked: boolean) => void;
-  className?: string;
-}
-
-const ThreeStateCheckbox: React.FC<ThreeStateCheckboxProps> = ({ state, onChange, className = '' }) => {
-  const checkboxRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (checkboxRef.current) {
-      checkboxRef.current.indeterminate = state === 'some';
-    }
-  }, [state]);
-
-  return (
-    <input
-      ref={checkboxRef}
-      type="checkbox"
-      checked={state === 'all'}
-      onChange={(e) => onChange(e.target.checked)}
-      className={`rounded border-gray-300 transition-opacity duration-200 ${className}`}
-      style={{
-        opacity: state === 'some' ? 0.6 : 1,
-        filter: state === 'some' ? 'saturate(0.7)' : 'none',
-      }}
-      title={
-        state === 'all' 
-          ? 'All items selected' 
-          : state === 'some' 
-          ? 'Some items selected' 
-          : 'No items selected'
-      }
-    />
-  );
-};
 
 export default function AdvancedPage() {
   return (
@@ -86,7 +47,9 @@ function AdvancedPageContent() {
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(new Set([
     // Default basic columns (excluding always pinned columns: ID, Name, Type)
-    'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg'
+    'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg',
+    // Default timestamp columns
+    'public_timestamp', 'status_timestamp', 'measurements_timestamp'
   ]));
   const [isProcessingColumns, setIsProcessingColumns] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -94,9 +57,6 @@ function AdvancedPageContent() {
   
   // Filter state
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedType, setSelectedType] = useState('');
-  const [healthFilter, setHealthFilter] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   
   // Accordion state for column groups
   const [expandedGroup, setExpandedGroup] = useState<string>('station');
@@ -110,6 +70,87 @@ function AdvancedPageContent() {
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   const router = useRouter();
+
+  // DEBUG: Comprehensive count update function with extensive logging
+  const updateCounts = useCallback(() => {
+    console.log('=== UPDATE COUNTS START ===');
+    console.log('1. gridApi exists:', !!gridApi);
+    console.log('2. stationData.length:', stationData.length);
+    
+    if (!gridApi) {
+      console.log('3. No gridApi - setting basic counts');
+      setRowCount(stationData.length);
+      setFilteredCount(stationData.length);
+      setIsFiltered(false);
+      console.log('=== UPDATE COUNTS END (no gridApi) ===');
+      return;
+    }
+
+    // Get total row count
+    const totalRows = stationData.length;
+    console.log('3. Total rows from data:', totalRows);
+    
+    // Get displayed row count (after all filters)
+    const displayedRowCount = gridApi.getDisplayedRowCount();
+    console.log('4. Displayed row count from AG-Grid:', displayedRowCount);
+    
+    // Check for AG-Grid column filters
+    const gridFilterModel = gridApi.getFilterModel();
+    const hasGridFilters = Object.keys(gridFilterModel).length > 0;
+    console.log('5. AG-Grid filter model:', gridFilterModel);
+    console.log('6. Has AG-Grid filters:', hasGridFilters);
+    
+    // Check for custom search filter
+    const hasSearchFilter = Boolean(searchTerm.trim());
+    console.log('7. Search term:', searchTerm);
+    console.log('8. Has search filter:', hasSearchFilter);
+    
+    // Determine if filtered
+    const isCurrentlyFiltered = hasGridFilters || hasSearchFilter;
+    console.log('9. Is currently filtered:', isCurrentlyFiltered);
+    
+    // Set state
+    console.log('10. Setting state:', {
+      rowCount: totalRows,
+      filteredCount: displayedRowCount,
+      isFiltered: isCurrentlyFiltered
+    });
+    
+    setRowCount(totalRows);
+    setFilteredCount(displayedRowCount);
+    setIsFiltered(isCurrentlyFiltered);
+    
+    console.log('=== UPDATE COUNTS END ===');
+  }, [gridApi, stationData.length, searchTerm]);
+
+  // DEBUG: AG-Grid event handlers with extensive logging
+  const onFilterChanged = useCallback(() => {
+    console.log('=== ON FILTER CHANGED START ===');
+    console.log('Filter changed event triggered');
+    if (gridApi) {
+      const filterModel = gridApi.getFilterModel();
+      console.log('Current filter model:', filterModel);
+      console.log('Displayed rows after filter:', gridApi.getDisplayedRowCount());
+    }
+    // Don't update counts here to avoid loops - let onModelUpdated handle it
+    console.log('=== ON FILTER CHANGED END ===');
+  }, [gridApi]);
+
+  const onModelUpdated = useCallback(() => {
+    console.log('=== ON MODEL UPDATED START ===');
+    console.log('Model updated event triggered');
+    if (gridApi) {
+      console.log('Grid ready for count update');
+      // Use setTimeout to ensure grid has finished updating
+      setTimeout(() => {
+        console.log('Calling updateCounts from onModelUpdated');
+        updateCounts();
+      }, 0);
+    } else {
+      console.log('No gridApi in onModelUpdated');
+    }
+    console.log('=== ON MODEL UPDATED END ===');
+  }, [gridApi, updateCounts]);
 
   // Extract data loading function for reuse
   const loadAdvancedData = async (isAutoRefresh = false) => {
@@ -321,8 +362,6 @@ function AdvancedPageContent() {
       clearInterval(refreshInterval);
     };
   }, []);
-
-  // Note: No need for column visibility initialization since we use selectedColumns Set
 
   // Close column selector when clicking outside
   useEffect(() => {
@@ -592,8 +631,29 @@ function AdvancedPageContent() {
       });
     }
 
-    // Add dynamic public data columns if selected
-    publicKeys.forEach(key => {
+    // Add dynamic public data columns if selected (timestamp first)
+    if (selectedColumns.has('public_timestamp')) {
+      columns.push({
+        headerName: 'Public: Timestamp',
+        field: 'public_timestamp',
+        minWidth: 160,
+        valueFormatter: params => {
+          if (!params.value) return '';
+          const date = new Date(params.value);
+          return date.toLocaleString();
+        },
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          buttons: ['reset', 'apply'],
+          comparator: (filterDate: Date, cellValue: string) => {
+            const cellDate = new Date(cellValue);
+            return cellDate.getTime() - filterDate.getTime();
+          }
+        }
+      });
+    }
+
+    publicKeys.filter(key => key !== 'public_timestamp').forEach(key => {
       const colId = `public_data.${key}`;
       if (selectedColumns.has(colId)) {
         columns.push({
@@ -609,8 +669,29 @@ function AdvancedPageContent() {
       }
     });
 
-    // Add dynamic status data columns if selected
-    statusKeys.forEach(key => {
+    // Add dynamic status data columns if selected (timestamp first)
+    if (selectedColumns.has('status_timestamp')) {
+      columns.push({
+        headerName: 'Status: Timestamp',
+        field: 'status_timestamp',
+        minWidth: 160,
+        valueFormatter: params => {
+          if (!params.value) return '';
+          const date = new Date(params.value);
+          return date.toLocaleString();
+        },
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          buttons: ['reset', 'apply'],
+          comparator: (filterDate: Date, cellValue: string) => {
+            const cellDate = new Date(cellValue);
+            return cellDate.getTime() - filterDate.getTime();
+          }
+        }
+      });
+    }
+
+    statusKeys.filter(key => key !== 'status_timestamp').forEach(key => {
       const colId = `status_data.${key}`;
       if (selectedColumns.has(colId)) {
         columns.push({
@@ -626,8 +707,29 @@ function AdvancedPageContent() {
       }
     });
 
-    // Add dynamic measurement data columns if selected
-    measurementKeys.forEach(key => {
+    // Add dynamic measurement data columns if selected (timestamp first)
+    if (selectedColumns.has('measurements_timestamp')) {
+      columns.push({
+        headerName: 'Measurements: Timestamp',
+        field: 'measurements_timestamp',
+        minWidth: 160,
+        valueFormatter: params => {
+          if (!params.value) return '';
+          const date = new Date(params.value);
+          return date.toLocaleString();
+        },
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          buttons: ['reset', 'apply'],
+          comparator: (filterDate: Date, cellValue: string) => {
+            const cellDate = new Date(cellValue);
+            return cellDate.getTime() - filterDate.getTime();
+          }
+        }
+      });
+    }
+
+    measurementKeys.filter(key => key !== 'measurements_timestamp').forEach(key => {
       const colId = `measurements_data.${key}`;
       if (selectedColumns.has(colId)) {
         columns.push({
@@ -647,14 +749,19 @@ function AdvancedPageContent() {
     return columns;
   }, [stationData, columnStructure, selectedColumns]);
 
-  const updateCounts = (api: GridApi, totalRows: number) => {
-    const displayedCount = api.getDisplayedRowCount();
-    setRowCount(totalRows);
-    setFilteredCount(displayedCount);
-    setIsFiltered(displayedCount !== totalRows);
-  };
+  // DEBUG: Update counts when gridApi or search term changes
+  useEffect(() => {
+    console.log('=== USE EFFECT (gridApi/searchTerm) START ===');
+    console.log('gridApi:', !!gridApi, 'searchTerm:', searchTerm);
+    if (gridApi) {
+      console.log('Calling updateCounts from useEffect');
+      updateCounts();
+    }
+    console.log('=== USE EFFECT (gridApi/searchTerm) END ===');
+  }, [gridApi, searchTerm, updateCounts]);
 
   const onGridReady = (params: GridReadyEvent) => {
+    console.log('=== GRID READY START ===');
     console.log('Grid ready event fired');
     setGridApi(params.api);
 
@@ -663,30 +770,26 @@ function AdvancedPageContent() {
       console.log('Columns available at grid ready:', allColumns.map(col => col.getColId()));
     }
 
+    // Initial count update after a short delay
     setTimeout(() => {
-      const delayedColumns = params.api.getColumns();
-      if (delayedColumns) {
-        console.log('Columns available after delay:', delayedColumns.map(col => col.getColId()));
-      }
+      console.log('Initial count update from grid ready');
+      const displayedRowCount = params.api.getDisplayedRowCount();
+      console.log('Displayed rows at grid ready:', displayedRowCount);
     }, 100);
+    console.log('=== GRID READY END ===');
   };
-
-  const onModelUpdated = (params: ModelUpdatedEvent) => {
-    updateCounts(params.api, stationData.length);
-  };
-
-  const onFilterChanged = (params: FilterChangedEvent) => {
-    updateCounts(params.api, stationData.length);
-  };
-
-
 
   // Show basic columns only (reset to default selection)
   const hideAllExceptBasic = () => {
     setIsProcessingColumns(true);
     console.log('Resetting to basic view');
     setSelectedColumns(new Set([
-      'label_id', 'label_name', 'label_type', 'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg'
+      // Always pinned columns (excluded from basic view as they're always visible)
+      // 'label_id', 'label_name', 'label_type', 
+      // Basic station columns
+      'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg',
+      // Timestamp columns for data freshness
+      'public_timestamp', 'status_timestamp', 'measurements_timestamp'
     ]));
     setTimeout(() => setIsProcessingColumns(false), 100);
   };
@@ -699,14 +802,14 @@ function AdvancedPageContent() {
     console.log('Showing all columns');
     
     const allColumns = new Set([
-      // Basic columns
-      'label_id', 'label_name', 'label_type',
-      // Location columns  
-      'latitude', 'longitude', 'altitude', 'ip',
-      // Health columns
-      'avg_fetch_health_24h', 'avg_fetch_health_7d', 'hourly_status', 'avg_data_health_24h', 'avg_data_health_7d',
-      'hourly_timestamps',
-      'total_measurements', 'last_updated'
+      // Always pinned columns (excluded as they're always visible)
+      // 'label_id', 'label_name', 'label_type',
+      // All station columns
+      'label', 'latitude', 'longitude', 'altitude', 
+      'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
+      'online_last_seen', 'data_health_24h_avg', 'data_health_7d_avg',
+      // Timestamp columns
+      'public_timestamp', 'status_timestamp', 'measurements_timestamp'
     ]);
 
     // Add all dynamic columns
@@ -721,6 +824,41 @@ function AdvancedPageContent() {
     });
 
     setSelectedColumns(allColumns);
+    setTimeout(() => setIsProcessingColumns(false), 100);
+  };
+
+  // Reset everything to default state
+  const resetToDefault = () => {
+    setIsProcessingColumns(true);
+    
+    // Reset filters
+    setSearchTerm('');
+    
+    // Reset to basic view columns
+    setSelectedColumns(new Set([
+      'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg',
+      'public_timestamp', 'status_timestamp', 'measurements_timestamp'
+    ]));
+    
+    // Reset grid sorting and filters if gridApi is available
+    if (gridApi) {
+      try {
+        // Reset sorting by applying column state with no sort
+        gridApi.applyColumnState({
+          defaultState: { sort: null }
+        });
+        
+        // Reset all column filters
+        gridApi.setFilterModel({});
+        
+        // Refresh the grid to apply changes
+        gridApi.onFilterChanged();
+      } catch (error) {
+        console.warn('Could not reset grid state:', error);
+      }
+    }
+    
+    console.log('Reset table to default state');
     setTimeout(() => setIsProcessingColumns(false), 100);
   };
 
@@ -760,13 +898,16 @@ function AdvancedPageContent() {
         ];
         break;
       case 'public-data':
-        columnsToToggle = publicKeys.map(key => `public_data.${key}`);
+        // Include public_timestamp first, then other keys
+        columnsToToggle = ['public_timestamp', ...publicKeys.map(key => `public_data.${key}`)];
         break;
       case 'status-data':
-        columnsToToggle = statusKeys.map(key => `status_data.${key}`);
+        // Include status_timestamp first, then other keys
+        columnsToToggle = ['status_timestamp', ...statusKeys.map(key => `status_data.${key}`)];
         break;
       case 'measurements':
-        columnsToToggle = measurementKeys.map(key => `measurements_data.${key}`);
+        // Include measurements_timestamp first, then other keys
+        columnsToToggle = ['measurements_timestamp', ...measurementKeys.map(key => `measurements_data.${key}`)];
         break;
     }
 
@@ -804,13 +945,16 @@ function AdvancedPageContent() {
         ];
         break;
       case 'public-data':
-        columnsInGroup = publicKeys.map(key => `public_data.${key}`);
+        // Include public_timestamp first, then other keys
+        columnsInGroup = ['public_timestamp', ...publicKeys.map(key => `public_data.${key}`)];
         break;
       case 'status-data':
-        columnsInGroup = statusKeys.map(key => `status_data.${key}`);
+        // Include status_timestamp first, then other keys
+        columnsInGroup = ['status_timestamp', ...statusKeys.map(key => `status_data.${key}`)];
         break;
       case 'measurements':
-        columnsInGroup = measurementKeys.map(key => `measurements_data.${key}`);
+        // Include measurements_timestamp first, then other keys
+        columnsInGroup = ['measurements_timestamp', ...measurementKeys.map(key => `measurements_data.${key}`)];
         break;
     }
 
@@ -848,12 +992,12 @@ function AdvancedPageContent() {
     }
   };
 
-  // Filter functions
-  const getUniqueTypes = () => {
-    return Array.from(new Set(stationData.map(station => station.label_type).filter(Boolean)));
-  };
-
+  // Filter functions for search term (applied before data goes to AG-Grid)
   const filteredData = useMemo(() => {
+    console.log('=== FILTERED DATA CALCULATION START ===');
+    console.log('Original data length:', stationData.length);
+    console.log('Search term:', searchTerm);
+    
     let filtered = stationData;
 
     // Search term filter (station name or ID)
@@ -863,40 +1007,13 @@ function AdvancedPageContent() {
         station.label_name?.toLowerCase().includes(term) ||
         station.label_id?.toString().includes(term)
       );
+      console.log('After search filter length:', filtered.length);
     }
 
-    // Type filter
-    if (selectedType) {
-      filtered = filtered.filter(station => station.label_type === selectedType);
-    }
-
-    // Health filter
-    if (healthFilter) {
-      filtered = filtered.filter(station => {
-        const health = station.avg_fetch_health_24h;
-        switch (healthFilter) {
-          case 'excellent':
-            return health >= 90;
-          case 'good':
-            return health >= 70 && health < 90;
-          case 'poor':
-            return health >= 50 && health < 70;
-          case 'bad':
-            return health < 50;
-          default:
-            return true;
-        }
-      });
-    }
-
+    console.log('Final filtered data length:', filtered.length);
+    console.log('=== FILTERED DATA CALCULATION END ===');
     return filtered;
-  }, [stationData, searchTerm, selectedType, healthFilter]);
-
-  const clearFilters = () => {
-    setSearchTerm('');
-    setSelectedType('');
-    setHealthFilter('');
-  };
+  }, [stationData, searchTerm]);
 
   const handleRowClick = (stationId: number) => {
     router.push(`/station/${stationId}`);
@@ -914,7 +1031,7 @@ function AdvancedPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="h-full bg-gray-50 p-6">
       {/* Header Section */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
@@ -958,23 +1075,27 @@ function AdvancedPageContent() {
         </div>
       </div>
 
-      {/* Column Control Buttons */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <button
-          onClick={hideAllExceptBasic}
-          disabled={isProcessingColumns}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300 text-sm"
-        >
-          {isProcessingColumns ? 'Processing...' : 'Basic View'}
-        </button>
-
-        <button
-          onClick={showAllColumns}
-          disabled={isProcessingColumns}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300 text-sm"
-        >
-          {isProcessingColumns ? 'Processing...' : 'Show All Columns'}
-        </button>
+        <div className="relative search-container">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by station name or ID..."
+            className="px-4 py-2 border border-gray-300 text-gray-500 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-80"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              title="Clear search"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
 
         <div className="relative column-selector-container">
           <button
@@ -985,8 +1106,17 @@ function AdvancedPageContent() {
           </button>
         </div>
 
-        {/* Export Dropdown */}
-        <div className="relative export-dropdown-container">
+        {/* Reset Button - text style with underline */}
+        <button
+          onClick={resetToDefault}
+          disabled={isProcessingColumns}
+          className="text-sm text-gray-600 hover:text-gray-800 underline disabled:text-gray-400 disabled:cursor-not-allowed"
+        >
+          Reset
+        </button>
+
+        {/* Export Dropdown - moved to right */}
+        <div className="relative export-dropdown-container ml-auto">
           <button
             onClick={() => setShowExportDropdown(!showExportDropdown)}
             disabled={!gridApi || stationData.length === 0}
@@ -1028,100 +1158,7 @@ function AdvancedPageContent() {
             </div>
           )}
         </div>
-
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-          </svg>
-          Filters {showFilters ? '▲' : '▼'}
-        </button>
       </div>
-
-      {/* Filter Controls */}
-      {showFilters && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Search Input */}
-            <div>
-              <label htmlFor="searchStations" className="block text-sm font-medium text-gray-700 mb-1">
-                Search Stations
-              </label>
-              <input
-                id="searchStations"
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Station name or ID..."
-                className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            {/* Type Filter */}
-            <div>
-              <label htmlFor="stationType" className="block text-sm font-medium text-gray-700 mb-1">
-                Station Type
-              </label>
-              <select
-                id="stationType"
-                value={selectedType}
-                onChange={(e) => setSelectedType(e.target.value)}
-                className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">All Types</option>
-                {getUniqueTypes().map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Health Filter */}
-            <div>
-              <label htmlFor="healthStatus" className="block text-sm font-medium text-gray-700 mb-1">
-                Health Status
-              </label>
-              <select
-                id="healthStatus"
-                value={healthFilter}
-                onChange={(e) => setHealthFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 text-gray-500 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">All Health Levels</option>
-                <option value="excellent">Excellent (≥90%)</option>
-                <option value="good">Good (70-89%)</option>
-                <option value="poor">Poor (50-69%)</option>
-                <option value="bad">Bad (&lt;50%)</option>
-              </select>
-            </div>
-
-            {/* Clear Filters */}
-            <div className="flex items-end">
-              <button
-                onClick={clearFilters}
-                className="w-full px-3 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 text-sm"
-              >
-                Clear Filters
-              </button>
-            </div>
-          </div>
-
-          {/* Filter Results Summary */}
-          <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600">
-            Showing {filteredData.length} of {stationData.length} stations
-            {(searchTerm || selectedType || healthFilter) && (
-              <span className="text-blue-600 ml-2">
-                (filtered by: {[
-                  searchTerm && 'search',
-                  selectedType && 'type',
-                  healthFilter && 'health'
-                ].filter(Boolean).join(', ')})
-              </span>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Content Area */}
       {loading ? (
@@ -1147,6 +1184,31 @@ function AdvancedPageContent() {
                   >
                     ×
                   </button>
+                </div>
+                
+                <div className="p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        showAllColumns();
+                      }}
+                      disabled={isProcessingColumns}
+                      className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Show All
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        hideAllExceptBasic();
+                      }}
+                      disabled={isProcessingColumns}
+                      className="px-3 py-1.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Basic View
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto">
@@ -1241,6 +1303,20 @@ function AdvancedPageContent() {
                       </button>
                       {expandedGroup === 'public-data' && (
                         <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                          {/* Timestamp column first */}
+                          <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.has('public_timestamp')}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                toggleColumnVisibility('public_timestamp', e.target.checked);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="font-medium">📅 Timestamp</span>
+                          </label>
+                          {/* Other public data columns */}
                           {Object.keys(columnStructure.public_data).map(key => {
                             const colId = `public_data.${key}`;
                             return (
@@ -1293,6 +1369,20 @@ function AdvancedPageContent() {
                       </button>
                       {expandedGroup === 'status-data' && (
                         <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                          {/* Timestamp column first */}
+                          <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.has('status_timestamp')}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                toggleColumnVisibility('status_timestamp', e.target.checked);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="font-medium">📅 Timestamp</span>
+                          </label>
+                          {/* Other status data columns */}
                           {Object.keys(columnStructure.status_data).map(key => {
                             const colId = `status_data.${key}`;
                             return (
@@ -1345,6 +1435,20 @@ function AdvancedPageContent() {
                       </button>
                       {expandedGroup === 'measurements' && (
                         <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                          {/* Timestamp column first */}
+                          <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.has('measurements_timestamp')}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                toggleColumnVisibility('measurements_timestamp', e.target.checked);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="font-medium">📅 Timestamp</span>
+                          </label>
+                          {/* Other measurements data columns */}
                           {Object.keys(columnStructure.measurements_data).map(key => {
                             const colId = `measurements_data.${key}`;
                             return (
@@ -1376,8 +1480,8 @@ function AdvancedPageContent() {
                 columnDefs={columnDefs}
                 rowData={filteredData}
                 onGridReady={onGridReady}
-                onModelUpdated={onModelUpdated}
                 onFilterChanged={onFilterChanged}
+                onModelUpdated={onModelUpdated}
                 animateRows={false}
                 onRowClicked={(event) => {
                   const id = event.data.id;
@@ -1416,6 +1520,31 @@ function AdvancedPageContent() {
                     >
                       ×
                     </button>
+                  </div>
+                  
+                  <div className="p-4 border-b border-gray-200 bg-gray-50">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showAllColumns();
+                        }}
+                        disabled={isProcessingColumns}
+                        className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Show All
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          hideAllExceptBasic();
+                        }}
+                        disabled={isProcessingColumns}
+                        className="px-3 py-1.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Basic View
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="overflow-hidden">
@@ -1512,6 +1641,20 @@ function AdvancedPageContent() {
                         </button>
                         {expandedGroup === 'public-data' && (
                           <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            {/* Timestamp column first */}
+                            <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has('public_timestamp')}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility('public_timestamp', e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="font-medium">📅 Timestamp</span>
+                            </label>
+                            {/* Other public data columns */}
                             {Object.keys(columnStructure.public_data).map(key => {
                               const colId = `public_data.${key}`;
                               return (
@@ -1564,6 +1707,20 @@ function AdvancedPageContent() {
                         </button>
                         {expandedGroup === 'status-data' && (
                           <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            {/* Timestamp column first */}
+                            <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has('status_timestamp')}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility('status_timestamp', e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="font-medium">📅 Timestamp</span>
+                            </label>
+                            {/* Other status data columns */}
                             {Object.keys(columnStructure.status_data).map(key => {
                               const colId = `status_data.${key}`;
                               return (
@@ -1616,6 +1773,20 @@ function AdvancedPageContent() {
                         </button>
                         {expandedGroup === 'measurements' && (
                           <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            {/* Timestamp column first */}
+                            <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has('measurements_timestamp')}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility('measurements_timestamp', e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="font-medium">📅 Timestamp</span>
+                            </label>
+                            {/* Other measurements data columns */}
                             {Object.keys(columnStructure.measurements_data).map(key => {
                               const colId = `measurements_data.${key}`;
                               return (
@@ -1648,8 +1819,8 @@ function AdvancedPageContent() {
                 columnDefs={columnDefs}
                 rowData={filteredData}
                 onGridReady={onGridReady}
-                onModelUpdated={onModelUpdated}
                 onFilterChanged={onFilterChanged}
+                onModelUpdated={onModelUpdated}
                 animateRows={false}
                 onRowClicked={(event) => {
                   const id = event.data.id;
@@ -1668,13 +1839,6 @@ function AdvancedPageContent() {
                 enableBrowserTooltips={true}
               />
             </div>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-4 flex items-center justify-end">
-            <p className="text-sm text-gray-600">
-              Rows: {filteredCount} of {rowCount} {isFiltered && '(Filtered)'}
-            </p>
           </div>
         </>
       )}

@@ -36,6 +36,28 @@ export async function getMeasurementsTable(id: number): Promise<CollectorDataKey
   return res.data;
 }
 
+// Report functions with datetime parameter
+export async function getPublicTableWithDatetime(id: number, datetime: Date): Promise<CollectorDataKeyValue[]> {
+  const res = await api.get<CollectorDataKeyValue[]>(`/stations/public-table-datetime/${id}`, {
+    params: { datetime: datetime.toISOString() }
+  });
+  return res.data;
+}
+
+export async function getStatusTableWithDatetime(id: number, datetime: Date): Promise<CollectorDataKeyValue[]> {
+  const res = await api.get<CollectorDataKeyValue[]>(`/stations/status-table-datetime/${id}`, {
+    params: { datetime: datetime.toISOString() }
+  });
+  return res.data;
+}
+
+export async function getMeasurementsTableWithDatetime(id: number, datetime: Date): Promise<CollectorDataKeyValue[]> {
+  const res = await api.get<CollectorDataKeyValue[]>(`/stations/measurements-table-datetime/${id}`, {
+    params: { datetime: datetime.toISOString() }
+  });
+  return res.data;
+}
+
 // Function to fetch all combined data for all stations
 export async function fetchAdvancedStationData(): Promise<AdvancedStationData[]> {
   try {

@@ -76,13 +76,14 @@ export interface AdvancedStationData {
   
   // Dynamic key-value pairs from public table
   public_data: Record<string, string>
-  
+  public_timestamp: string
   // Dynamic key-value pairs from status table  
   status_data: Record<string, string>
+  status_timestamp: string
   
   // Dynamic key-value pairs from measurements table
   measurements_data: Record<string, string>
-  
+  measurements_timestamp: string
   // Metadata
   last_updated?: string
   total_measurements?: number

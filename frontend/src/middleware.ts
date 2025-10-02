@@ -5,7 +5,7 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get('supabase-token')?.value
   
   // List of protected routes that require authentication
-  const protectedRoutes = ['/network', '/overview', '/advanced', '/station']
+  const protectedRoutes = ['/simple', '/overview', '/advanced', '/station']
   const isProtectedRoute = protectedRoutes.some(route => 
     request.nextUrl.pathname.startsWith(route)
   )
@@ -15,17 +15,17 @@ export async function middleware(request: NextRequest) {
       request.nextUrl.pathname === '/' || 
       !isProtectedRoute) {
     
-    // If logged in and trying to access login page, redirect to network
+    // If logged in and trying to access login page, redirect to simple
     if (token && request.nextUrl.pathname === '/login') {
       const url = request.nextUrl.clone()
-      url.pathname = '/network'
+      url.pathname = '/simple'
       return NextResponse.redirect(url)
     }
     
-    // If accessing root and logged in, redirect to network
+    // If accessing root and logged in, redirect to simple
     if (token && request.nextUrl.pathname === '/') {
       const url = request.nextUrl.clone()
-      url.pathname = '/network'
+      url.pathname = '/simple'
       return NextResponse.redirect(url)
     }
     
