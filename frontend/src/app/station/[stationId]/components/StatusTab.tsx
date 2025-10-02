@@ -1,6 +1,7 @@
 import React from 'react';
 import type { CollectorDataKeyValue } from '@/types/station';
 import { formatDistanceToNow } from 'date-fns';
+import { showDatabaseTimeAsUTC1 } from '@/utils/timezoneHelpers';
 
 interface StatusTabProps {
   statusData: CollectorDataKeyValue[];
@@ -12,8 +13,8 @@ const StatusTab: React.FC<StatusTabProps> = ({ statusData }) => {
   }
   // Get the latest timestamp from the data (assuming all rows have the same timestamp, or use the first)
   const timestamp = statusData[0].station_timestamp;
-  const dateObj = new Date(timestamp);
-  const timeAgo = formatDistanceToNow((dateObj.getTime() + 1 * 60 * 60 * 1000), {
+  const timestampInfo = showDatabaseTimeAsUTC1(timestamp);
+  const timeAgo = formatDistanceToNow(timestampInfo.dateForCalculations, {
       addSuffix: true // adds "ago" or "in X time"
     });
   return (
@@ -21,7 +22,7 @@ const StatusTab: React.FC<StatusTabProps> = ({ statusData }) => {
       <h3 style={{ fontWeight: 600, fontSize: 17, color: '#315284', marginBottom: 2 }}>Status Table</h3>
       {timestamp && (
         <div style={{ color: '#8593a5', fontSize: 13, marginBottom: 12 }}>
-          <h4>Data timestamp: {new Date(timestamp).toLocaleString()}</h4>
+          <h4>Data timestamp: {timestampInfo.displayWithTimezone}</h4>
             ({timeAgo})
         </div>
       )}

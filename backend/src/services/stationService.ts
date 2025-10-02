@@ -109,16 +109,11 @@ export async function getPublicTableWithDatetime(id: number, datetime: Date) {
   try {
     console.log(`Attempting to fetch public table for station ${id} at ${datetime.toISOString()}`);
     
-    // Calculate start datetime (10 minutes before the provided datetime)
-    const endDatetime = new Date(datetime);
-    const startDatetime = new Date(datetime.getTime() - 10 * 60 * 1000); // 10 minutes before
-    
-    console.log(`Time range: ${startDatetime.toISOString()} to ${endDatetime.toISOString()}`);
+    const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
     
     const { data, error } = await rpcClient.rpc('get_collector_data_kv_public_datetime', { 
       _station_id: id, 
-      _start_datetime: startDatetime.toISOString(),
-      _end_datetime: endDatetime.toISOString()
+      _datetime: dateTime.toISOString()
     });
     
     if (error) {
@@ -138,17 +133,12 @@ export async function getPublicTableWithDatetime(id: number, datetime: Date) {
 export async function getStatusTableWithDatetime(id: number, datetime: Date) {
   try {
     console.log(`Attempting to fetch status table for station ${id} at ${datetime.toISOString()}`);
-    
-    // Calculate start datetime (10 minutes before the provided datetime)
-    const endDatetime = new Date(datetime);
-    const startDatetime = new Date(datetime.getTime() - 10 * 60 * 1000); // 10 minutes before
-    
-    console.log(`Time range: ${startDatetime.toISOString()} to ${endDatetime.toISOString()}`);
+
+    const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
     
     const { data, error } = await rpcClient.rpc('get_collector_data_kv_status_datetime', { 
       _station_id: id, 
-      _start_datetime: startDatetime.toISOString(),
-      _end_datetime: endDatetime.toISOString()
+      _datetime: dateTime.toISOString()
     });
     
     if (error) {
@@ -156,7 +146,7 @@ export async function getStatusTableWithDatetime(id: number, datetime: Date) {
       console.error('Error details:', JSON.stringify(error, null, 2));
       throw error;
     }
-    
+    console.log(data);
     console.log(`Status table with datetime for station ${id}: ${data?.length || 0} records`);
     return data || [];
   } catch (err) {
@@ -171,12 +161,11 @@ export async function getMeasurementsTableWithDatetime(id: number, datetime: Dat
     
     // Calculate start datetime (10 minutes before the provided datetime)
     const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
-    
+
     const { data, error } = await rpcClient.rpc('get_collector_data_kv_measurements_datetime', { 
       _station_id: id, 
       _datetime: dateTime.toISOString()
     });
-    
     if (error) {
       console.error(`Error fetching measurements table with datetime for station ${id}:`, error);
       console.error('Error details:', JSON.stringify(error, null, 2));

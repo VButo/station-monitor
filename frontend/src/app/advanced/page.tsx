@@ -656,12 +656,31 @@ function AdvancedPageContent() {
     publicKeys.filter(key => key !== 'public_timestamp').forEach(key => {
       const colId = `public_data.${key}`;
       if (selectedColumns.has(colId)) {
+        // Check if the value is numeric by sampling multiple stations (some might not have data)
+        let isNumeric = false;
+        for (const station of stationData) {
+          const sampleValue = station?.public_data?.[key];
+          if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
+            const numValue = Number(sampleValue);
+            if (!isNaN(numValue)) {
+              isNumeric = true;
+              break; // Found a valid numeric sample, use it to determine filter type
+            }
+          }
+        }
+        
         columns.push({
           headerName: `Public: ${key}`,
           field: colId,
           minWidth: 120,
           valueGetter: params => params.data?.public_data?.[key] || '',
-          filter: 'agTextColumnFilter',
+          comparator: isNumeric ? (valueA, valueB) => {
+            // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
+            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || isNaN(Number(valueA))) ? -Infinity : Number(valueA);
+            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || isNaN(Number(valueB))) ? -Infinity : Number(valueB);
+            return numA - numB;
+          } : undefined,
+          filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
           filterParams: {
             buttons: ['reset', 'apply'],
           }
@@ -694,12 +713,31 @@ function AdvancedPageContent() {
     statusKeys.filter(key => key !== 'status_timestamp').forEach(key => {
       const colId = `status_data.${key}`;
       if (selectedColumns.has(colId)) {
+        // Check if the value is numeric by sampling multiple stations (some might not have data)
+        let isNumeric = false;
+        for (const station of stationData) {
+          const sampleValue = station?.status_data?.[key];
+          if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
+            const numValue = Number(sampleValue);
+            if (!isNaN(numValue)) {
+              isNumeric = true;
+              break; // Found a valid numeric sample, use it to determine filter type
+            }
+          }
+        }
+        
         columns.push({
           headerName: `Status: ${key}`,
           field: colId,
           minWidth: 120,
           valueGetter: params => params.data?.status_data?.[key] || '',
-          filter: 'agTextColumnFilter',
+          comparator: isNumeric ? (valueA, valueB) => {
+            // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
+            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || isNaN(Number(valueA))) ? -Infinity : Number(valueA);
+            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || isNaN(Number(valueB))) ? -Infinity : Number(valueB);
+            return numA - numB;
+          } : undefined,
+          filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
           filterParams: {
             buttons: ['reset', 'apply'],
           }
@@ -732,12 +770,31 @@ function AdvancedPageContent() {
     measurementKeys.filter(key => key !== 'measurements_timestamp').forEach(key => {
       const colId = `measurements_data.${key}`;
       if (selectedColumns.has(colId)) {
+        // Check if the value is numeric by sampling multiple stations (some might not have data)
+        let isNumeric = false;
+        for (const station of stationData) {
+          const sampleValue = station?.measurements_data?.[key];
+          if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
+            const numValue = Number(sampleValue);
+            if (!isNaN(numValue)) {
+              isNumeric = true;
+              break; // Found a valid numeric sample, use it to determine filter type
+            }
+          }
+        }
+        
         columns.push({
           headerName: `Measurement: ${key}`,
           field: colId,
           minWidth: 120,
           valueGetter: params => params.data?.measurements_data?.[key] || '',
-          filter: 'agNumberColumnFilter',
+          comparator: isNumeric ? (valueA, valueB) => {
+            // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
+            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || isNaN(Number(valueA))) ? -Infinity : Number(valueA);
+            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || isNaN(Number(valueB))) ? -Infinity : Number(valueB);
+            return numA - numB;
+          } : undefined,
+          filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
           filterParams: {
             buttons: ['reset', 'apply'],
           }

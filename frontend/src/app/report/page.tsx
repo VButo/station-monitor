@@ -5,6 +5,7 @@ import type { CollectorDataKeyValue, Station } from '@/types/station';
 import PublicTab from '../station/[stationId]/components/PublicTab';
 import StatusTab from '../station/[stationId]/components/StatusTab';
 import MeasurementsTab from '../station/[stationId]/components/MeasurementsTab';
+import { convertCroatianTimeToDbSearchTime } from '@/utils/timezoneHelpers';
 
 export default function ReportPage() {
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
@@ -48,11 +49,11 @@ export default function ReportPage() {
 
     setLoading(true);
     try {
-      // Combine date and time for API calls
-      const datetime = new Date(`${selectedDate}T${selectedTime}:00`);
+      // Convert Croatian time selection to database search time (UTC+1)
+      const datetime = convertCroatianTimeToDbSearchTime(selectedDate, selectedTime);
+      console.log('Croatian time selected:', `${selectedDate} ${selectedTime}`);
+      console.log('Database search time:', datetime.toISOString());
       
-      // TODO: These API calls will need to be updated to accept datetime parameter
-      // For now, using the existing functions - you'll need to modify them for datetime filtering
       const [publicDataResult, statusDataResult, measurementsDataResult] = await Promise.all([
         getPublicTableWithDatetime(selectedStation.id, datetime), // Now uses datetime parameter
         getStatusTableWithDatetime(selectedStation.id, datetime), // Now uses datetime parameter 
@@ -116,8 +117,17 @@ export default function ReportPage() {
     // Add print-specific styles and trigger browser print
     const printStyles = `
       @media print {
+        /* Hide browser header/footer with URL */
+        @page {
+          margin: 0.5in;
+          size: A4;
+        }
+        
+        /* Hide everything except report container */
         body * { visibility: hidden; }
         #report-container, #report-container * { visibility: visible; }
+        
+        /* Position report container for print */
         #report-container { 
           position: absolute; 
           left: 0; 
@@ -126,9 +136,62 @@ export default function ReportPage() {
           margin: 0;
           padding: 20px;
           box-shadow: none;
+          background: white !important;
         }
+        
+        /* Force desktop layout for key-value rows in print */
+        .kv-row {
+          display: flex !important;
+          flex-direction: row !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          gap: 0 !important;
+          border-bottom: 1px solid #eef1f4 !important;
+          padding: 12px 0 !important;
+          font-size: 14px !important;
+        }
+        
+        .kv-key, .kv-value {
+          width: 50% !important;
+          text-align: left !important;
+        }
+        
+        .kv-key {
+          font-weight: 500 !important;
+          color: #8593a5 !important;
+        }
+        
+        .kv-value {
+          color: #253d61 !important;
+          font-family: monospace !important;
+          letter-spacing: 0.3px !important;
+          font-weight: 400 !important;
+          word-break: break-word !important;
+        }
+        
+        /* Hide print button and other no-print elements */
         .no-print { display: none !important; }
+        
+        /* Page break handling */
         .page-break { page-break-before: always; }
+        
+        /* Ensure good print formatting */
+        h2, h3, h4 {
+          color: #315284 !important;
+          page-break-after: avoid !important;
+        }
+        
+        /* Print-specific sizing */
+        body {
+          -webkit-print-color-adjust: exact !important;
+          color-adjust: exact !important;
+          font-size: 12px !important;
+        }
+        
+        /* Hide navigation and other page elements */
+        nav, header, .header, .nav {
+          display: none !important;
+        }
       }
     `;
     
@@ -137,7 +200,7 @@ export default function ReportPage() {
     styleSheet.textContent = printStyles;
     document.head.appendChild(styleSheet);
     
-    // Trigger print
+    // Use regular print dialog
     window.print();
     
     // Clean up
@@ -179,7 +242,7 @@ export default function ReportPage() {
         </div>
 
         {/* Station Search and DateTime Selection Row */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="no-print" style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           {/* Station Search */}
           <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
             <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
@@ -322,7 +385,7 @@ export default function ReportPage() {
 
         {/* Tab Navigation */}
         {selectedStation && (
-          <div style={{ display: 'flex', gap: 36, marginBottom: 16, borderBottom: '1px solid #e2e8f0' }}>
+          <div className="no-print" style={{ display: 'flex', gap: 36, marginBottom: 16, borderBottom: '1px solid #e2e8f0' }}>
             <button
               type="button"
               onClick={() => setSelectedTab('public')}
