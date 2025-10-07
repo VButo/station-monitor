@@ -245,10 +245,11 @@ export default function ReportPage() {
         <div className="no-print" style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           {/* Station Search */}
           <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
+            <label htmlFor="station-search-input" style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
               Select Station
             </label>
             <input
+              id="station-search-input"
               type="text"
               placeholder="Search stations..."
               value={searchTerm}
@@ -281,20 +282,26 @@ export default function ReportPage() {
                 }}
               >
                 {filteredStations.map((station) => (
-                  <li
+                  <button
                     key={station.id}
+                    type="button"
                     onClick={() => handleStationSelect(station)}
                     style={{
+                      display: 'block',
+                      width: '100%',
                       padding: '10px 15px',
                       cursor: 'pointer',
+                      border: 'none',
                       borderBottom: '1px solid #eee',
                       color: '#315284',
+                      background: 'white',
+                      textAlign: 'left',
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f5f5f5')}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'white')}
                   >
                     {station.label}
-                  </li>
+                  </button>
                 ))}
               </ul>
             )}
@@ -302,10 +309,11 @@ export default function ReportPage() {
 
           {/* Date Selection */}
           <div style={{ minWidth: 140 }}>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
+            <label htmlFor="date-input" style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
               Date
             </label>
             <input
+              id="date-input"
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
@@ -321,10 +329,11 @@ export default function ReportPage() {
 
           {/* Time Selection */}
           <div style={{ minWidth: 120 }}>
-            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
+            <label htmlFor="time-select-input" style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
               Time
             </label>
             <select
+              id="time-select-input"
               value={selectedTime}
               onChange={(e) => setSelectedTime(e.target.value)}
               style={{

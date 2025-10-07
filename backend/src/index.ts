@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import stationRoutes from './routes/stationRoutes';
 import measurementRoutes from './routes/measurementRoutes';
 import userRoutes from './routes/userRoutes';
-import testVariableRoutes from './routes/testVariableRoutes';
+import overviewRoutes from './routes/overviewRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { advancedDataScheduler } from './services/schedulerService';
 
@@ -37,7 +37,7 @@ app.use(cookieParser());
 app.use('/api/stations', stationRoutes);
 app.use('/api/measurements', measurementRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/test-variable', testVariableRoutes);
+app.use('/api', overviewRoutes);
 
 // Error handler
 app.use(errorHandler);

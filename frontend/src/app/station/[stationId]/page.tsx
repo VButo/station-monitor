@@ -79,6 +79,7 @@ export default function StationPage(props: StationPageProps) {
         <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #0001', padding: '32px 36px', minWidth: '50%', maxWidth: '100%' }}>
           <div style={{ height: 24, width: 200, backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 28, animation: 'pulse 1.5s infinite' }} />
           {[...Array(15)].map((_, i) => (
+            
             <div key={i} style={{ height: 20, width: '100%', backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
           ))}
 

@@ -13,12 +13,14 @@
     "@supabase/supabase-js": "^2.57.4",
     "ag-grid-community": "^34.2.0",
     "ag-grid-react": "^34.2.0",
+    "apexcharts": "^5.3.5",
     "axios": "^1.12.2",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "exceljs": "^4.4.0",
     "next": "15.5.2",
     "react": "19.1.0",
+    "react-apexcharts": "^1.7.0",
     "react-dom": "19.1.0"
   },
   "devDependencies": {

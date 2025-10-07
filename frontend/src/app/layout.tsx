@@ -76,7 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     }
   };
 
-  const isFullPage = pathname==='/advanced' || pathname === '/station' || pathname === '/login' || pathname === '/simple' || pathname === '/overview';
+  const isFullPage = pathname==='/advanced' || pathname === '/station' || pathname === '/login' || pathname === '/simple';
 
   if (loading) {
     return (
@@ -91,13 +91,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className="h-full min-h-screen">
       <body className="bg-gray-50 h-full min-h-screen">
-        <div className={`min-h-screen flex flex-col ${isFullPage ? 'h-full' : ''}`}>
+          <div className={`min-h-screen flex flex-col ${isFullPage ? 'h-full' : ''}`}>
           {user && (
             <nav className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0 relative z-40">
               <div className="flex items-center justify-between mx-auto">
                 <div className="flex items-center gap-8">
-                  <Link href="/dashboard" className="flex items-center gap-2">
-                    <Image src="/metmonic_logo.svg" alt="Metmonic Logo" width={270} height={50} />
+                  <Link href="/overview" className="flex items-center gap-2">
+                    <Image src="/metmonic_logo.svg" alt="Metmonic Logo" width={270} height={50} priority style={{ height: 'auto'}}/>
                   </Link>
 
                   {/* Desktop Menu */}

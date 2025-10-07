@@ -24,7 +24,7 @@ export default function FilterControls({
   onHealthFilterChange,
   onToggleFilters,
   onClearFilters
-}: FilterControlsProps) {
+}: Readonly<FilterControlsProps>) {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showHealthDropdown, setShowHealthDropdown] = useState(false);
 

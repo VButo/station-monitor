@@ -675,7 +675,6 @@ function AdvancedPageContent() {
           minWidth: 120,
           valueGetter: params => params.data?.public_data?.[key] || '',
           comparator: isNumeric ? (valueA, valueB) => {
-            // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
             const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || isNaN(Number(valueA))) ? -Infinity : Number(valueA);
             const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || isNaN(Number(valueB))) ? -Infinity : Number(valueB);
             return numA - numB;
@@ -1297,36 +1296,49 @@ function AdvancedPageContent() {
                       </div>
                     </button>
                     {expandedGroup === 'station' && (
-                      <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
-                        {/* Note: ID, Name, and Type are always pinned left and not configurable */}
-                        {[
-                          { id: 'label', label: 'Label' },
-                          { id: 'latitude', label: 'Latitude' },
-                          { id: 'longitude', label: 'Longitude' },
-                          { id: 'altitude', label: 'Altitude' },
-                          { id: 'ip_address', label: 'IP Address' },
-                          { id: 'sms_number', label: 'SMS Number' },
-                          { id: 'online_24h_avg', label: 'Online 24h Avg' },
-                          { id: 'online_7d_avg', label: 'Online 7d Avg' },
-                          { id: 'online_24h_graph', label: 'Online 24h Graph' },
-                          { id: 'online_last_seen', label: 'Online Last Seen' },
-                          { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
-                          { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
-                        ].map(({ id, label }) => (
-                          <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
-                            <input
-                              type="checkbox"
-                              checked={selectedColumns.has(id)}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                toggleColumnVisibility(id, e.target.checked);
-                              }}
-                              className="rounded border-gray-300"
-                            />
-                            <span>{label}</span>
-                          </label>
-                        ))}
-                      </div>
+                      <button
+                        type="button"
+                        className="px-4 pb-4 space-y-2 w-full text-left bg-transparent border-none"
+                        tabIndex={0}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.stopPropagation();
+                          }
+                        }}
+                        aria-label="Column group options"
+                      >
+                        <div>
+                          {/* Note: ID, Name, and Type are always pinned left and not configurable */}
+                          {[
+                            { id: 'label', label: 'Label' },
+                            { id: 'latitude', label: 'Latitude' },
+                            { id: 'longitude', label: 'Longitude' },
+                            { id: 'altitude', label: 'Altitude' },
+                            { id: 'ip_address', label: 'IP Address' },
+                            { id: 'sms_number', label: 'SMS Number' },
+                            { id: 'online_24h_avg', label: 'Online 24h Avg' },
+                            { id: 'online_7d_avg', label: 'Online 7d Avg' },
+                            { id: 'online_24h_graph', label: 'Online 24h Graph' },
+                            { id: 'online_last_seen', label: 'Online Last Seen' },
+                            { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
+                            { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
+                          ].map(({ id, label }) => (
+                            <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has(id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility(id, e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </button>
                     )}
                   </div>
 
@@ -1697,14 +1709,13 @@ function AdvancedPageContent() {
                           </span>
                         </button>
                         {expandedGroup === 'public-data' && (
-                          <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                          <div className="px-3 pb-3 space-y-2 max-h-48 overflow-y-auto">
                             {/* Timestamp column first */}
                             <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
                               <input
                                 type="checkbox"
                                 checked={selectedColumns.has('public_timestamp')}
                                 onChange={(e) => {
-                                  e.stopPropagation();
                                   toggleColumnVisibility('public_timestamp', e.target.checked);
                                 }}
                                 className="rounded border-gray-300"

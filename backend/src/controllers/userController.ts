@@ -14,7 +14,7 @@ export async function login(req: Request, res: Response) {
     }
 
     // Set cookie to expire after 3 hours (3 * 60 * 60 * 1000 milliseconds)
-    const threeHoursInMs = 3 * 60 * 60 * 1000;
+    const threeHoursInMs = 1 * 60 * 60 * 1000;
     res.cookie('supabase-token', accessToken, { 
       httpOnly: true, 
       secure: false, 
