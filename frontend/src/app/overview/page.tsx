@@ -51,13 +51,80 @@ const StatsCard = ({
           <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
           <p className={`text-3xl font-bold ${color}`}>{value}</p>
         </div>
-        <div className={`p-3 rounded-full ${color.includes('green') ? 'bg-green-100' : 
-                                           color.includes('red') ? 'bg-red-100' : 
-                                           color.includes('blue') ? 'bg-blue-100' :
-                                           color.includes('yellow') ? 'bg-yellow-100' :
-                                           'bg-purple-100'}`}>
-          {icon}
+        {(() => {
+          let bgColor = 'bg-purple-100';
+          if (color.includes('green')) {
+            bgColor = 'bg-green-100';
+          } else if (color.includes('red')) {
+            bgColor = 'bg-red-100';
+          } else if (color.includes('blue')) {
+            bgColor = 'bg-blue-100';
+          } else if (color.includes('yellow')) {
+            bgColor = 'bg-yellow-100';
+          }
+          return (
+            <div className={`p-3 rounded-full ${bgColor}`}>
+              {icon}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+};
+
+// Skeleton components for loading states
+const SkeletonStatsCard = () => {
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+          <div className="h-8 bg-gray-200 rounded w-16"></div>
         </div>
+        <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+      </div>
+    </div>
+  );
+};
+
+const SkeletonChart = () => {
+  return (
+    <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-100 animate-pulse">
+      <div className="flex items-center justify-between mb-6">
+        <div className="h-6 bg-gray-200 rounded w-48"></div>
+        <div className="flex gap-2">
+          <div className="h-8 bg-gray-200 rounded w-12"></div>
+          <div className="h-8 bg-gray-200 rounded w-12"></div>
+        </div>
+      </div>
+      <div className="h-80 bg-gray-200 rounded"></div>
+    </div>
+  );
+};
+
+const OverviewPageSkeleton = () => {
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="h-8 bg-gray-200 rounded w-48 mb-2 animate-pulse"></div>
+        <div className="h-4 bg-gray-200 rounded w-96 animate-pulse"></div>
+      </div>
+
+      {/* Stats Cards Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-8">
+        <SkeletonStatsCard />
+        <SkeletonStatsCard />
+        <SkeletonStatsCard />
+        <SkeletonStatsCard />
+        <SkeletonStatsCard />
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <SkeletonChart />
+        <SkeletonChart />
       </div>
     </div>
   );
@@ -343,11 +410,13 @@ function OverviewPageContent() {
     xaxis: {
       type: 'datetime' as const,
       labels: {
-        format: 'HH:mm',
+        format: timePeriod === '7d' ? 'MMM dd' : 'HH:mm',
         style: { colors: '#6B7280', fontSize: '12px' }
       },
       axisBorder: { show: false },
-      axisTicks: { show: false }
+      axisTicks: { show: false },
+      crosshairs: { show: false },
+      tooltip: { enabled: false }
     },
     yaxis: {
       labels: {
@@ -359,6 +428,7 @@ function OverviewPageContent() {
       theme: 'light' as const,
       shared: true,
       intersect: false,
+      marker: { show: false },
       x: {
         format: 'MMM dd HH:mm'
       },
@@ -403,10 +473,60 @@ function OverviewPageContent() {
     dataLabels: { enabled: false }
   };
 
+  // Calculate dynamic Y-axis bounds based on actual data
+  const calculateYAxisBounds = () => {
+    if (healthChartData.length === 0) {
+      return { min: 0, max: 100 };
+    }
+
+    const allValues: number[] = [];
+    
+    // Collect all values from selected metrics
+    if (selectedHealthMetrics.has('average')) {
+      allValues.push(...healthChartData.map(point => point.avgHealth));
+    }
+    if (selectedHealthMetrics.has('min')) {
+      allValues.push(...healthChartData.map(point => point.minHealth));
+    }
+    if (selectedHealthMetrics.has('max')) {
+      allValues.push(...healthChartData.map(point => point.maxHealth));
+    }
+
+    if (allValues.length === 0) {
+      return { min: 0, max: 100 };
+    }
+
+    const dataMin = Math.min(...allValues);
+    const dataMax = Math.max(...allValues);
+    
+    // Add padding and round to nice intervals
+    const range = dataMax - dataMin;
+    const padding = Math.max(range * 0.1, 5); // At least 5% padding or 10% of range
+    
+    // Calculate bounds with nice rounding
+    let calculatedMin = Math.max(0, dataMin - padding);
+    let calculatedMax = Math.min(100, dataMax + padding);
+    
+    // Round to nice intervals (5% increments)
+    calculatedMin = Math.floor(calculatedMin / 5) * 5;
+    calculatedMax = Math.ceil(calculatedMax / 5) * 5;
+    
+    // Ensure minimum range of 20%
+    if (calculatedMax - calculatedMin < 20) {
+      const center = (calculatedMax + calculatedMin) / 2;
+      calculatedMin = Math.max(0, Math.floor((center - 10) / 5) * 5);
+      calculatedMax = Math.min(100, Math.ceil((center + 10) / 5) * 5);
+    }
+    
+    return { min: calculatedMin, max: calculatedMax };
+  };
+
+  const yAxisBounds = calculateYAxisBounds();
+
   // Health chart options
   const healthChartOptions = {
     chart: {
-      type: 'line' as const,
+      type: 'area' as const,
       height: 300,
       zoom: { enabled: false },
       toolbar: { show: false },
@@ -418,10 +538,11 @@ function OverviewPageContent() {
     },
     colors: ['#8B5CF6', '#EF4444', '#10B981'], // Purple for average, red for min, green for max
     fill: {
-      opacity: 1
+      type: 'solid',
+      opacity: 0.15
     },
     stroke: {
-      width: 3,
+      width: 2,
       curve: 'smooth' as const
     },
     grid: {
@@ -433,15 +554,17 @@ function OverviewPageContent() {
     xaxis: {
       type: 'datetime' as const,
       labels: {
-        format: 'HH:mm',
+        format: timePeriod === '7d' ? 'MMM dd' : 'HH:mm',
         style: { colors: '#6B7280', fontSize: '12px' }
       },
       axisBorder: { show: false },
-      axisTicks: { show: false }
+      axisTicks: { show: false },
+      crosshairs: { show: false },
+      tooltip: { enabled: false }
     },
     yaxis: {
-      min: 0,
-      max: 100,
+      min: yAxisBounds.min,
+      max: yAxisBounds.max,
       labels: {
         style: { colors: '#6B7280', fontSize: '12px' },
         formatter: (value: number) => `${Math.round(value)}%`
@@ -451,6 +574,7 @@ function OverviewPageContent() {
       theme: 'light' as const,
       shared: true,
       intersect: false,
+      marker: { show: false },
       x: {
         format: 'MMM dd HH:mm'
       },
@@ -516,6 +640,7 @@ function OverviewPageContent() {
       }
     },
     legend: {
+      show: true,
       position: 'top' as const,
       horizontalAlign: 'right' as const
     },
@@ -524,26 +649,89 @@ function OverviewPageContent() {
 
   // Icons for stats cards
   const OnlineIcon = () => (
-    <svg className="w-6 h-6 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      data-prefix="fas"
+      data-icon="globe"
+      className={"w-8 h-8 text-green-400"}
+      role="img"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 640 640"
+      fill="currentColor"
+    >
+      <g transform="translate(64, 64)">
+        <path d="M352 256c0 22.2-1.2 43.6-3.3 64H163.3c-2.2-20.4-3.3-41.8-3.3-64s1.2-43.6 3.3-64H348.7c2.2 20.4 3.3 41.8 3.3 64zm28.8-64H503.9c5.3 20.5 8.1 41.9 8.1 64s-2.8 43.5-8.1 64H380.8c2.1-20.6 3.2-42 3.2-64s-1.1-43.4-3.2-64zm112.6-32H376.7c-10-63.9-29.8-117.4-55.3-151.6c78.3 20.7 142 77.5 171.9 151.6zm-149.1 0H167.7c6.1-36.4 15.5-68.6 27-94.7c10.5-23.6 22.2-40.7 33.5-51.5C239.4 3.2 248.7 0 256 0s16.6 3.2 27.8 13.8c11.3 10.8 23 27.9 33.5 51.5c11.6 26 20.9 58.2 27 94.7zm-209 0H18.6C48.6 85.9 112.2 29.1 190.6 8.4C165.1 42.6 145.3 96.1 135.3 160zM8.1 192H131.2c-2.1 20.6-3.2 42-3.2 64s1.1 43.4 3.2 64H8.1C2.8 299.5 0 278.1 0 256s2.8-43.5 8.1-64zM194.7 446.6c-11.6-26-20.9-58.2-27-94.6H344.3c-6.1 36.4-15.5 68.6-27 94.6c-10.5 23.6-22.2 40.7-33.5 51.5C272.6 508.8 263.3 512 256 512s-16.6-3.2-27.8-13.8c-11.3-10.8-23-27.9-33.5-51.5zM135.3 352c10 63.9 29.8 117.4 55.3 151.6C112.2 482.9 48.6 426.1 18.6 352H135.3zm358.1 0c-30 74.1-93.6 130.9-171.9 151.6c25.5-34.2 45.2-87.7 55.3-151.6H493.4z"/>
+      </g>
     </svg>
   );
 
   const OfflineIcon = () => (
-    <svg className="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-      <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      data-prefix="fas"
+      data-icon="power-off"
+      className="w-8 h-8 text-red-400"
+      role="img"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 640 640"
+      fill="currentColor"
+    >
+      <g transform="translate(64, 64)">
+        <path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V256c0 17.7 14.3 32 32 32s32-14.3 32-32V32zM143.5 120.6c13.6-11.3 15.4-31.5 4.1-45.1s-31.5-15.4-45.1-4.1C49.7 115.4 16 181.8 16 256c0 132.5 107.5 240 240 240s240-107.5 240-240c0-74.2-33.8-140.6-86.6-184.6c-13.6-11.3-33.8-9.4-45.1 4.1s-9.4 33.8 4.1 45.1c38.9 32.3 63.5 81 63.5 135.4c0 97.2-78.8 176-176 176s-176-78.8-176-176c0-54.4 24.7-103.1 63.5-135.4z" />
+      </g>
     </svg>
   );
 
   const TotalIcon = () => (
-    <svg className="w-6 h-6 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      data-prefix="fas"
+      data-icon="server"
+      className={"w-8 h-8 text-blue-400"}
+      role="img"
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 640 640"
+      fill="currentColor"
+    >
+      <g transform="translate(64, 64)">
+        <path d="M64 32C28.7 32 0 60.7 0 96v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm280 72a24 24 0 1 1 0 48 24 24 0 1 1 0-48zm48 24a24 24 0 1 1 48 0 24 24 0 1 1 -48 0zM64 288c-35.3 0-64 28.7-64 64v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V352c0-35.3-28.7-64-64-64H64zm280 72a24 24 0 1 1 0 48 24 24 0 1 1 0-48zm56 24a24 24 0 1 1 48 0 24 24 0 1 1 -48 0z" />
+      </g>
     </svg>
   );
 
   const PercentageIcon = () => (
-    <svg className="w-6 h-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-      <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+    <svg
+      className="w-7 h-7"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      {/* Outer arc */}
+      <path
+        d="M3.5 10.5a10 10 0 0 1 17 0"
+        stroke="#fde047" // Tailwind yellow-300
+        strokeWidth={2.5}
+        fill="none"
+        strokeLinecap="round"
+      />
+      {/* Middle arc */}
+      <path
+        d="M6.75 14a6 6 0 0 1 10.5 0"
+        stroke="#fad447"
+        strokeWidth={2.5}
+        fill="none"
+        strokeLinecap="round"
+      />
+      {/* Dot */}
+      <circle
+        cx={12}
+        cy={18}
+        r={2}
+        fill="#facc15" // Tailwind yellow-400
+      />
     </svg>
   );
 
@@ -558,117 +746,123 @@ function OverviewPageContent() {
       <div className="max-w-5xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Station Overview</h1>
-          <p className="text-sm text-gray-500 mt-1">Last 24 hours</p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-sm text-gray-500">Show last</span>
+            <div className="relative">
+              <select
+                value={timePeriod}
+                onChange={(e) => handleTimePeriodChange(e.target.value as TimePeriod)}
+                className="appearance-none bg-gray-50 border border-gray-300 rounded-md px-3 py-1 pr-8 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="24h">24 hours</option>
+                <option value="7d">7 days</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                  <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                </svg>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-96">
-            <div className="text-gray-500">Loading overview data...</div>
-          </div>
-        ) : error ? (
-          <div className="flex items-center justify-center h-96">
-            <div className="text-red-500">{error}</div>
-          </div>
-        ) : (
-          <>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
-              <StatsCard
-                title="Online"
-                value={stats.online}
-                color="text-green-400"
-                icon={<OnlineIcon />}
-              />
-              <StatsCard
-                title="Offline"
-                value={stats.offline}
-                color="text-red-400"
-                icon={<OfflineIcon />}
-              />
-              <StatsCard
-                title="Total"
-                value={stats.total}
-                color="text-blue-400"
-                icon={<TotalIcon />}
-              />
-              <StatsCard
-                title="% Online"
-                value={`${stats.onlinePercentage}%`}
-                color="text-yellow-400"
-                icon={<PercentageIcon />}
-              />
-              <StatsCard
-                title="% Health"
-                value={`${stats.avgHealth}%`}
-                color="text-purple-400"
-                icon={<HealthIcon />}
-              />
-            </div>
-
-            {/* Online Chart */}
-            <div className="bg-white rounded-lg shadow p-6 mb-8">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Station Online Status</h2>
-                <div className="relative">
-                  <select
-                    value={timePeriod}
-                    onChange={(e) => handleTimePeriodChange(e.target.value as TimePeriod)}
-                    className="appearance-none bg-gray-50 border border-gray-300 rounded-md px-5 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="24h">24h</option>
-                    <option value="7d">7d</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                      <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
-                    </svg>
-                  </div>
-                </div>
+        {(() => {
+          let content;
+          if (loading) {
+            content = <OverviewPageSkeleton />;
+          } else if (error) {
+            content = (
+              <div className="flex items-center justify-center h-96">
+                <div className="text-red-500">{error}</div>
+                <OverviewPageSkeleton />
               </div>
-              <Chart
-                options={chartOptions}
-                series={chartSeries}
-                type="bar"
-                height={300}
-              />
-            </div>
+            );
+          } else {
+            content = (
+              <>
+                {/* Stats Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+                  <StatsCard
+                    title="Online"
+                    value={stats.online}
+                    color="text-green-400"
+                    icon={<OnlineIcon />}
+                  />
+                  <StatsCard
+                    title="Offline"
+                    value={stats.offline}
+                    color="text-red-400"
+                    icon={<OfflineIcon />}
+                  />
+                  <StatsCard
+                    title="Total"
+                    value={stats.total}
+                    color="text-blue-400"
+                    icon={<TotalIcon />}
+                  />
+                  <StatsCard
+                    title="Online"
+                    value={`${stats.onlinePercentage}%`}
+                    color="text-yellow-400"
+                    icon={<PercentageIcon />}
+                  />
+                  <StatsCard
+                    title="Health"
+                    value={`${stats.avgHealth}%`}
+                    color="text-purple-400"
+                    icon={<HealthIcon />}
+                  />
+                </div>
 
-            {/* Health Chart */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Data Health</h2>
-                <div className="flex items-center gap-4">
-                  <div className="text-sm text-gray-500">
-                    Showing {timePeriod} data
+                {/* Online Chart */}
+                <div className="bg-white rounded-lg shadow p-6 mb-8">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900">Station Online Status</h2>
                   </div>
-                  <div className="relative">
-                    <div className="flex flex-wrap gap-2">
-                      {(['average', 'min', 'max'] as HealthMetric[]).map(metric => (
-                        <button
-                          key={metric}
-                          onClick={() => handleHealthMetricToggle(metric)}
-                          className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
-                            selectedHealthMetrics.has(metric)
-                              ? 'bg-purple-100 border-purple-300 text-purple-700'
-                              : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
-                          }`}
-                        >
-                          {metric.charAt(0).toUpperCase() + metric.slice(1)}
-                        </button>
-                      ))}
+                  <Chart
+                    options={chartOptions}
+                    series={chartSeries}
+                    type="bar"
+                    height={300}
+                  />
+                </div>
+
+                {/* Health Chart */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900">Data Health</h2>
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <div className="flex flex-wrap gap-2">
+                          {(['average', 'min', 'max'] as HealthMetric[]).map(metric => (
+                            <button
+                              key={metric}
+                              onClick={() => handleHealthMetricToggle(metric)}
+                              className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+                                selectedHealthMetrics.has(metric)
+                                  ? 'bg-purple-100 border-purple-300 text-purple-700'
+                                  : 'bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200'
+                              }`}
+                            >
+                              {metric.charAt(0).toUpperCase() + metric.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  <Chart
+                    options={healthChartOptions}
+                    series={healthChartSeries}
+                    type="area"
+                    height={300}
+                  />
                 </div>
-              </div>
-              <Chart
-                options={healthChartOptions}
-                series={healthChartSeries}
-                type="line"
-                height={300}
-              />
-            </div>
-          </>
-        )}
+              </>
+            );
+          }
+          return content;
+        })()}
       </div>
     </div>
   );

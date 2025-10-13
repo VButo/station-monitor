@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { getStations, getStationById, getMeasurementsTable, getPublicTable, getStatusTable, fetchStationStatus, getAverageStatus, getAdvancedStationData, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime } from '../controllers/stationController';
+import { getStations, getStationById, getMeasurementsTable, getPublicTable, getStatusTable, fetchStationStatus, getAverageStatus, getAdvancedStationData, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime, getStationOverviewData } from '../controllers/stationController';
 
 const router = Router();
 
 router.get('/', getStations);
 router.get('/station-status', fetchStationStatus);
+router.get('/station-overview', getStationOverviewData);
 router.get('/average-status', getAverageStatus);
 router.get('/advanced-table', getAdvancedStationData);
 router.get('/measurements-table/:id', getMeasurementsTable);

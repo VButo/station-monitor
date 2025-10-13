@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as stationService from '../services/stationService';
 import { advancedStationDataCache } from '../services/cacheService';
+import { supabase } from '../utils/supabaseClient';
 
 export async function getAverageStatus(req: Request, res: Response) {
   try {
@@ -25,6 +26,29 @@ export async function fetchStationStatus(req: Request, res: Response) {
     } else {
       res.status(500).json({ error: 'Unknown error' });
     }
+  }
+}
+
+export async function getStationOverviewData(req: Request, res: Response) {
+  try {
+    // Call the new RPC function directly
+    const { data, error } = await supabase.rpc('get_station_hourly_fetch_health');
+
+    if (error) {
+      console.error('Error fetching station hourly fetch health data:', error);
+      throw new Error('Failed to fetch station hourly fetch health data');
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Error in getStationOverviewData:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch station overview data'
+    });
   }
 }
 

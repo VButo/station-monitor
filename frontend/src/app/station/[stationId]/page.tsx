@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect, use } from 'react';
-import { fetchStationById, getPublicTable, getStatusTable, getMeasurementsTable, fetchStations, fetchStationStatus } from '@/utils/stationHelpers';
-import type { CollectorDataKeyValue, HourStatus, Station } from '@/types/station';
+import { fetchStationById, getPublicTable, getStatusTable, getMeasurementsTable, fetchStations, fetchStationOverviewData } from '@/utils/stationHelpers';
+import type { CollectorDataKeyValue, StationHourlyData, Station } from '@/types/station';
 import OverviewTab from './components/OverviewTab';
 import PublicTab from './components/PublicTab';
 import StatusTab from './components/StatusTab';
 import MeasurementsTab from './components/MeasurementsTab';
+import ModemTab from './components/ModemTab';
+import PublicLiveTab from './components/PublicLiveTab';
 import { useRouter } from 'next/navigation';
 
 interface StationPageProps {
@@ -21,28 +23,18 @@ export default function StationPage(props: StationPageProps) {
   const [publicData, setPublicData] = useState<CollectorDataKeyValue[]>([]);
   const [statusData, setStatusData] = useState<CollectorDataKeyValue[]>([]);
   const [measurementsData, setMeasurementsData] = useState<CollectorDataKeyValue[]>([]);
-  const [hourlyData, setHourlyData] = useState<HourStatus[]>([]);
+  const [hourlyData, setHourlyData] = useState<StationHourlyData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'public' | 'status' | 'measurements'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'public' | 'status' | 'measurements' | 'modem' | 'public-live'>('overview');
 
-  // Additional state for search
+  // Additional state for dropdown
   const [stationsList, setStationsList] = useState<Station[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredStations, setFilteredStations] = useState<Station[]>([]);
   const router = useRouter();
 
   // Fetch stations list on mount
   useEffect(() => {
     fetchStations().then((stations) => setStationsList(stations));
   }, []);
-
-  // Filter stations based on search term
-  useEffect(() => {
-    const filtered = stationsList.filter((s) =>
-      s.label.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredStations(filtered);
-  }, [searchTerm, stationsList]);
 
   // Fetch station data whenever stationIdNum changes
   useEffect(() => {
@@ -53,7 +45,7 @@ export default function StationPage(props: StationPageProps) {
         const publicData = await getPublicTable(stationIdNum);
         const statusData = await getStatusTable(stationIdNum);
         const measurementsData = await getMeasurementsTable(stationIdNum);
-        const hourlyData = await fetchStationStatus();
+        const hourlyData = await fetchStationOverviewData();
 
         setHourlyData(hourlyData);
         setMeasurementsData(measurementsData);
@@ -68,7 +60,6 @@ export default function StationPage(props: StationPageProps) {
   }, [stationIdNum]);
 
   const handleStationSelect = (id: number) => {
-    setSearchTerm('');
     setSelectedTab('overview'); // optional reset
     router.push(`/station/${id}`);
   };
@@ -80,7 +71,7 @@ export default function StationPage(props: StationPageProps) {
           <div style={{ height: 24, width: 200, backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 28, animation: 'pulse 1.5s infinite' }} />
           {[...Array(15)].map((_, i) => (
             
-            <div key={i} style={{ height: 20, width: '100%', backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
+            <div key={`skeleton-${i}`} style={{ height: 20, width: '100%', backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
           ))}
 
           <style>{`
@@ -109,206 +100,145 @@ export default function StationPage(props: StationPageProps) {
         return <StatusTab statusData={statusData} />;
       case 'measurements':
         return <MeasurementsTab measurementsData={measurementsData} />;
+      case 'modem':
+        return <ModemTab />;
+      case 'public-live':
+        return <PublicLiveTab />;
       default:
         return null;
     }
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fafbfc', maxWidth: '100%', display: 'flex', justifyContent: 'center', paddingTop: 32, paddingBottom: 32 }}>
-      <div
-        id="station-container"
-        style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #0001', padding: '32px 36px' }}
-      >
-        <h2 style={{ fontWeight: 700, fontSize: 20, color: '#315284', marginBottom: 8 }}>
-          Station: {station.label}
-        </h2>
-
-        {/* Search input */}
-        <div style={{ marginBottom: 20, position: 'relative' }}>
-          <input
-            type="text"
-            placeholder="Search stations..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              color: '#8593a5',
-              borderRadius: 6,
-              border: '1px solid #ccc',
-              fontSize: 16,
-            }}
-          />
-
-          {searchTerm && filteredStations.length > 0 && (
-            <ul
-              style={{
-                position: 'absolute',
-                width: '100%',
-                maxHeight: 200,
-                overflowY: 'auto',
-                background: 'white',
-                border: '1px solid #ccc',
-                borderRadius: 6,
-                marginTop: 4,
-                zIndex: 1000,
-                listStyle: 'none',
-                padding: 0,
-              }}
-            >
-              {filteredStations.slice(0, 10).map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleStationSelect(s.id)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    padding: '8px 12px',
-                    cursor: 'pointer',
-                    color: '#364153',
-                    borderBottom: '1px solid #eee',
-                    fontSize: 16,
-                  }}
-                  tabIndex={0}
-                  aria-label={`Select station ${s.label}`}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      handleStationSelect(s.id);
-                    }
-                  }}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </ul>
-          )}
+    <div className="h-full bg-gray-50 flex flex-col">
+      {/* Header Section */}
+      <div className="px-6 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between max-w-5xl mx-auto mt-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">{station.label}</h1>
+            </div>
+          </div>
         </div>
-
-        {/* Tabs */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 28,
-            fontSize: 15,
-            color: '#315284',
-            borderBottom: '2px solid #f0f3f9',
-            marginBottom: 16,
-            cursor: 'pointer',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setSelectedTab('overview')}
-            style={{
-              padding: '8px 0',
-              borderBottom: selectedTab === 'overview' ? '2.5px solid #257cff' : 'none',
-              color: selectedTab === 'overview' ? '#257cff' : '#315284',
-              fontWeight: selectedTab === 'overview' ? 600 : 400,
-              userSelect: 'none',
-              background: 'none',
-              borderTop: 'none',
-              borderLeft: 'none',
-              borderRight: 'none',
-              cursor: 'pointer',
-            }}
-            tabIndex={0}
-            aria-pressed={selectedTab === 'overview'}
-          >
-            Overview
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedTab('public')}
-            style={{
-              padding: '8px 0',
-              borderBottom: selectedTab === 'public' ? '2.5px solid #257cff' : 'none',
-              color: selectedTab === 'public' ? '#257cff' : '#315284',
-              fontWeight: selectedTab === 'public' ? 600 : 400,
-              userSelect: 'none',
-              background: 'none',
-              borderTop: 'none',
-              borderLeft: 'none',
-              borderRight: 'none',
-              cursor: 'pointer',
-            }}
-            tabIndex={0}
-            aria-pressed={selectedTab === 'public'}
-          >
-            Public
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedTab('status')}
-            style={{
-              padding: '8px 0',
-              borderBottom: selectedTab === 'status' ? '2.5px solid #257cff' : 'none',
-              color: selectedTab === 'status' ? '#257cff' : '#315284',
-              fontWeight: selectedTab === 'status' ? 600 : 400,
-              userSelect: 'none',
-              background: 'none',
-              borderTop: 'none',
-              borderLeft: 'none',
-              borderRight: 'none',
-              cursor: 'pointer',
-            }}
-            tabIndex={0}
-            aria-pressed={selectedTab === 'status'}
-          >
-            Status
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedTab('measurements')}
-            style={{
-              padding: '8px 0',
-              borderBottom: selectedTab === 'measurements' ? '2.5px solid #257cff' : 'none',
-              color: selectedTab === 'measurements' ? '#257cff' : '#315284',
-              fontWeight: selectedTab === 'measurements' ? 600 : 400,
-              userSelect: 'none',
-              background: 'none',
-              borderTop: 'none',
-              borderLeft: 'none',
-              borderRight: 'none',
-              cursor: 'pointer',
-            }}
-            tabIndex={0}
-            aria-pressed={selectedTab === 'measurements'}
-          >
-            Measurements
-          </button>
-        </div>
-
-        {/* Tab content */}
-        {renderTabContent()}
       </div>
-      <style>{`
-        #station-container {
-          width: 50%;
-        }
-        @media (max-width: 1500px) {
-          #station-container {
-            width: 60%;
-          }
-        }
-        @media (max-width: 1250px) {
-          #station-container {
-            width: 70%;
-          }
-        }
-        @media (max-width: 1000px) {
-          #station-container {
-            width: 90%;
-          }
-        }
-        @media (max-width: 700px) {
-          #station-container {
-            width: 100%;
-          }
-        }
-      `}</style>
+
+      {/* Content Area */}
+      <div className="flex-1 min-h-0 p-6">
+        <div className="w-full h-full max-w-5xl mx-auto">
+          {/* Station Selector and Tabs Container */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-6">
+            <div className="p-6">
+              <label htmlFor="station-selector" className="block text-sm text-gray-500 mb-2">
+                Search stations
+              </label>
+              <select
+                id="station-selector"
+                value={station.id}
+                onChange={(e) => handleStationSelect(Number(e.target.value))}
+                className="w-1/3 min-w-[200px] h-10 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-500"
+              >
+                {stationsList.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Tab Navigation */}
+              <div className="flex items-center gap-2 mt-4">
+                <div className="flex flex-wrap md:flex-nowrap">
+                  <button
+                    onClick={() => setSelectedTab('overview')}
+                    className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
+                      selectedTab === 'overview'
+                        ? 'text-gray-500'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Overview
+                    {selectedTab === 'overview' && (
+                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-gray-500"></div>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSelectedTab('public')}
+                    className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
+                      selectedTab === 'public'
+                        ? 'text-gray-500'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Public
+                    {selectedTab === 'public' && (
+                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-gray-500"></div>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSelectedTab('status')}
+                    className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
+                      selectedTab === 'status'
+                        ? 'text-gray-500'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Status
+                    {selectedTab === 'status' && (
+                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-gray-500"></div>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSelectedTab('measurements')}
+                    className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
+                      selectedTab === 'measurements'
+                        ? 'text-gray-500'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Measurements
+                    {selectedTab === 'measurements' && (
+                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-gray-500"></div>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSelectedTab('modem')}
+                    className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
+                      selectedTab === 'modem'
+                        ? 'text-gray-500'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Modem
+                    {selectedTab === 'modem' && (
+                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-gray-500"></div>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSelectedTab('public-live')}
+                    className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
+                      selectedTab === 'public-live'
+                        ? 'text-gray-500'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Public LIVE
+                    {selectedTab === 'public-live' && (
+                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-gray-500"></div>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Content Container */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm h-full flex flex-col overflow-hidden">
+            {/* Tab content */}
+            <div className="flex-1 p-6 overflow-y-auto">
+              {renderTabContent()}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

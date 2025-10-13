@@ -26,8 +26,8 @@ export default function Login() {
         const user = await fetchCurrentUser();
         console.log('checkUser fetched:', user);
         if (user) {
-          console.log('User found, redirecting to /simple');
-          router.push('/simple');
+          console.log('User found, redirecting to /overview');
+          router.push('/overview');
         }
       } catch (error) {
         // User not logged in or session expired, stay on login page
@@ -44,7 +44,7 @@ export default function Login() {
       console.log('attempting login');
       const response = await loginUser(email, password);
       console.log('login done',  response);
-      router.push('/simple');
+      router.push('/overview');
     } catch (error: unknown) {
       if (error instanceof Error) {
         alert(error.message);

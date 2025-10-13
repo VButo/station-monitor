@@ -1,27 +1,32 @@
 import React from 'react';
-import type { Station } from '@/types/station';
+import type { Station, StationHourlyData } from '@/types/station';
 import TimelineCell from '@/components/TimelineCell';
 
 interface OverviewTabProps {
   station: Station;
-  hourlyData: { 
-    station_id: number; 
-    hourly_avg_array: number[];
-    hour_bucket_local?: string[]; // timestamps array 
-  }[];
+  hourlyData: StationHourlyData[];
 }
 
 const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
-  // Find station health data with 24 values or 'Error' otherwise
-  const stationHealth = hourlyData.find(d => d.station_id === station.id);
+  // Find station data
+  const stationData = hourlyData.find(d => d.station_id === station.id);
+  console.log(stationData);
+  // Prepare online chart data (convert boolean array to number array for TimelineCell)
+  const onlineChartData =
+    stationData?.hourly_online_array?.length === 24 
+      ? stationData.hourly_online_array
+      : ('Error' as const);
 
-  const chartData =
-    stationHealth?.hourly_avg_array?.length === 24 ? stationHealth.hourly_avg_array : ('Error' as const);
+  // Prepare health chart data  
+  const healthChartData =
+    stationData?.hourly_health_array?.length === 24 
+      ? stationData.hourly_health_array 
+      : ('Error' as const);
 
   // Extract timestamps if they exist and length matches
   const timestamps = 
-    stationHealth?.hour_bucket_local?.length === 24 
-      ? stationHealth.hour_bucket_local 
+    stationData?.hour_bucket_local?.length === 24 
+      ? stationData.hour_bucket_local 
       : undefined;
 
   const combinedFields = [
@@ -44,22 +49,51 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
 
   return (
     <div>
-      {/* Chart container */}
+      {/* Charts Container - Side by Side */}
       <div
         style={{
           marginBottom: '24px',
-          padding: '12px',
-          border: '1px solid #e0e0e0',
-          borderRadius: '8px',
-          backgroundColor: '#fafafa',
-          maxWidth: '100%',
-          overflowX: 'auto', // allow horizontal scroll on small screens
-          boxShadow: '0 0 8px rgba(0,0,0,0.05)',
+          display: 'flex',
+          gap: '16px',
+          flexWrap: 'wrap',
         }}
       >
-        <TimelineCell value={chartData} timestamps={timestamps} BarWidth={34} maxBarHeight={100}/>
-        <div style={{ textAlign: 'center', marginTop: '8px', color: '#555', fontSize: '14px' }}>
-          Station Health (Last 24 Hours)
+        {/* Online Status Chart */}
+        <div
+          style={{
+            flex: '1',
+            minWidth: '300px',
+            padding: '12px',
+            border: '1px solid #e0e0e0',
+            borderRadius: '8px',
+            backgroundColor: '#fafafa',
+            overflowX: 'auto',
+            boxShadow: '0 0 8px rgba(0,0,0,0.05)',
+          }}
+        >
+          <TimelineCell value={onlineChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
+          <div style={{ textAlign: 'center', marginTop: '8px', color: '#555', fontSize: '12px' }}>
+            Station Online Status (Last 24 Hours)
+          </div>
+        </div>
+
+        {/* Health Status Chart */}
+        <div
+          style={{
+            flex: '1',
+            minWidth: '300px',
+            padding: '12px',
+            border: '1px solid #e0e0e0',
+            borderRadius: '8px',
+            backgroundColor: '#fafafa',
+            overflowX: 'auto',
+            boxShadow: '0 0 8px rgba(0,0,0,0.05)',
+          }}
+        >
+          <TimelineCell value={healthChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
+          <div style={{ textAlign: 'center', marginTop: '8px', color: '#555', fontSize: '12px' }}>
+            Station Health (Last 24 Hours)
+          </div>
         </div>
       </div>
 
@@ -95,14 +129,17 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
         .kv-key {
           font-weight: 500;
           color: #8593a5;
-          width: 50%;
+          width: 200px;
+          min-width: 200px;
+          padding-right: 24px;
+          flex-shrink: 0;
         }
         .kv-value {
           color: #253d61;
           font-family: monospace, monospace;
           letter-spacing: 0.3px;
           font-weight: 400;
-          width: 50%;
+          flex: 1;
           text-align: left;
           word-break: break-all;
         }

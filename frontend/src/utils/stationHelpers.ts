@@ -1,4 +1,4 @@
-import type { Station, HourStatus, AvgStatus, CollectorDataKeyValue, AdvancedStationData } from '@/types/station'
+import type { Station, HourStatus, AvgStatus, CollectorDataKeyValue, AdvancedStationData, StationHourlyData } from '@/types/station'
 import api from './api';
 
 export async function fetchStations(): Promise<Station[]> {
@@ -9,6 +9,11 @@ export async function fetchStations(): Promise<Station[]> {
 export async function fetchStationStatus(): Promise<HourStatus[]> {
   const res = await api.get<HourStatus[]>(`/stations/station-status`);
   return res.data;
+}
+
+export async function fetchStationOverviewData(): Promise<StationHourlyData[]> {
+  const res = await api.get<{ success: boolean; data: StationHourlyData[] }>(`/stations/station-overview`);
+  return res.data.data;
 }
 
 export async function fetchStationById(id: number): Promise<Station | null> {

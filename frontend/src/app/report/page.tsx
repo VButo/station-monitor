@@ -210,9 +210,10 @@ export default function ReportPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fafbfc', maxWidth: '100%', display: 'flex', justifyContent: 'center', paddingTop: 32, paddingBottom: 32 }}>
+    <div style={{ minHeight: '100vh', background: '#fafbfc', display: 'flex', justifyContent: 'center', paddingTop: 32, paddingBottom: 32 }}>
       <div
         id="report-container"
+        className="max-w-5xl w-full"
         style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #0001', padding: '32px 36px' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -461,32 +462,6 @@ export default function ReportPage() {
         {/* Tab content */}
         {renderTabContent()}
       </div>
-      
-      <style>{`
-        #report-container {
-          width: 50%;
-        }
-        @media (max-width: 1500px) {
-          #report-container {
-            width: 60%;
-          }
-        }
-        @media (max-width: 1250px) {
-          #report-container {
-            width: 70%;
-          }
-        }
-        @media (max-width: 1000px) {
-          #report-container {
-            width: 90%;
-          }
-        }
-        @media (max-width: 700px) {
-          #report-container {
-            width: 100%;
-          }
-        }
-      `}</style>
     </div>
   );
 }

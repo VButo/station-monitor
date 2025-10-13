@@ -44,6 +44,13 @@ export interface HourStatus {
   hour_bucket_local: string[]
 }
 
+export interface StationHourlyData {
+  station_id: number
+  hourly_online_array: number[]
+  hourly_health_array: number[]
+  hour_bucket_local: string[]
+}
+
 export interface CollectorDataKeyValue {
   station_id: number
   collection_id: number

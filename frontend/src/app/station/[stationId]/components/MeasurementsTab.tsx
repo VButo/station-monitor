@@ -42,14 +42,17 @@ const MeasurementsTab: React.FC<MeasurementsTabProps> = ({ measurementsData }) =
           .kv-key {
             font-weight: 500;
             color: #8593a5;
-            width: 50%;
+            width: 300px;
+            min-width: 300px;
+            padding-right: 24px;
+            flex-shrink: 0;
           }
           .kv-value {
             color: #253d61;
             font-family: monospace, monospace;
             letter-spacing: 0.3px;
             font-weight: 400;
-            width: 50%;
+            flex: 1;
             text-align: left;
             word-break: break-all;
           }

@@ -43,7 +43,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         setUser(null);
         
         // If we're on a protected route and user fetch fails, redirect to login
-        const protectedRoutes = ['/simple', '/overview', '/advanced', '/station', '/report'];
+        const protectedRoutes = ['/network', '/overview', '/advanced', '/station', '/report'];
         const isProtectedRoute = protectedRoutes.some(route => 
           pathname.startsWith(route)
         );
@@ -76,7 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     }
   };
 
-  const isFullPage = pathname==='/advanced' || pathname === '/station' || pathname === '/login' || pathname === '/simple';
+  const isFullPage = pathname==='/advanced' || pathname === '/station' || pathname === '/login';
 
   if (loading) {
     return (
@@ -94,7 +94,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <div className={`min-h-screen flex flex-col ${isFullPage ? 'h-full' : ''}`}>
           {user && (
             <nav className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0 relative z-40">
-              <div className="flex items-center justify-between mx-auto">
+              <div className="flex items-center justify-between max-w-5xl mx-auto">
                 <div className="flex items-center gap-8">
                   <Link href="/overview" className="flex items-center gap-2">
                     <Image src="/metmonic_logo.svg" alt="Metmonic Logo" width={270} height={50} priority style={{ height: 'auto'}}/>
@@ -150,7 +150,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
               {/* Mobile Menu */}
               {mobileMenuOpen && (
-                <div className="md:hidden mt-4 bg-white rounded-md shadow-lg border border-gray-200 z-100 p-4 space-y-4">
+                <div className="md:hidden mt-4 bg-white rounded-md shadow-lg border border-gray-200 z-40 relative p-4 space-y-4">
                   <MenuLinks pathname={pathname} mobile onClickLink={() => setMobileMenuOpen(false)} />
 
                   {/* User info block inside mobile menu */}
@@ -176,25 +176,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
               {/* Click outside closing overlays */}
               {(mobileMenuOpen || dropdownOpen) && (
-                <button
-                  type="button"
-                  className="fixed inset-0 z-40 bg-transparent p-0 m-0 border-none"
-                  aria-label="Close menu overlays"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    setDropdownOpen(false);
+                <div
+                  className="fixed inset-0 z-30 bg-transparent"
+                  onClick={(e) => {
+                    // Only close if clicking on the overlay itself, not its children
+                    if (e.target === e.currentTarget) {
+                      setMobileMenuOpen(false);
+                      setDropdownOpen(false);
+                    }
                   }}
-                  style={{
-                    outline: 'none',
-                    width: '100%',
-                    height: '100%',
-                    position: 'fixed',
-                    left: 0,
-                    top: 0,
-                    cursor: 'pointer',
-                    background: 'transparent',
-                  }}
-                  tabIndex={0}
                 />
               )}
             </nav>
@@ -240,15 +230,13 @@ function MenuLinks({
       <Link href="/overview" className={linkClass('/overview')} onClick={onClickLink}>
         Overview
       </Link>
-      <Link href="/simple" className={linkClass('/simple')} onClick={onClickLink}>
-        Simple
+      <Link href="/network" className={linkClass('/network')} onClick={onClickLink}>
+        Network
       </Link>
       <Link href="/station/1" className={linkClass('/station', true)} onClick={onClickLink}>
         Station
       </Link>
-      <Link href="/advanced" className={linkClass('/advanced')} onClick={onClickLink}>
-        Advanced
-      </Link>
+
       <Link href="/report" className={linkClass('/report')} onClick={onClickLink}>
         Report
       </Link>

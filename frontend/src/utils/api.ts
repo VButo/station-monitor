@@ -34,13 +34,51 @@ api.interceptors.response.use(
 
 export default api;
 
-// Test Variable API functions
-export const getTestVariable = async (): Promise<string> => {
-  const response = await api.get<{ testVariable: string }>('/test-variable');
-  return response.data.testVariable;
+// Response Time API functions
+export interface ResponseTimeData {
+  collection_timestamp: string;
+  response_time: number;
+}
+
+export const getResponseTimes = async (): Promise<ResponseTimeData[]> => {
+  const response = await api.get<{ data: ResponseTimeData[] }>('/response-times');
+  console.log("Fetched response times:", response.data.data);
+  return response.data.data;
 };
 
-export const updateTestVariable = async (value: string): Promise<string> => {
-  const response = await api.put<{ testVariable: string }>('/test-variable', { testVariable: value });
-  return response.data.testVariable;
+// Overview API functions
+export interface OverviewData {
+  station_id: number;
+  station_online: boolean;
+  fetch_health: number; // Online%
+  data_health: number;  // Health%
+}
+
+export interface OnlineData24h {
+  station_id: number;
+  hourly_online_array: boolean[];
+  hourly_health_array: number[];
+  hour_bucket_local: string[];
+}
+
+export interface OnlineData7d {
+  station_id: number;
+  hourly_online_array: boolean[];
+  hourly_health_array: number[];
+  hour_bucket_local: string[];
+}
+
+export const getOverviewData = async (): Promise<OverviewData[]> => {
+  const response = await api.get<{ data: OverviewData[] }>('/overview-data');
+  return response.data.data;
+};
+
+export const getOnlineData24h = async (): Promise<OnlineData24h[]> => {
+  const response = await api.get<{ data: OnlineData24h[] }>('/online-data-24h');
+  return response.data.data;
+};
+
+export const getOnlineData7d = async (): Promise<OnlineData7d[]> => {
+  const response = await api.get<{ data: OnlineData7d[] }>('/online-data-7d');
+  return response.data.data;
 };
