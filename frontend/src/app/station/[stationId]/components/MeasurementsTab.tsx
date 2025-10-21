@@ -22,7 +22,7 @@ const MeasurementsTab: React.FC<MeasurementsTabProps> = ({ measurementsData }) =
         {timestamp && (
           <div style={{ color: '#8593a5', fontSize: 13, marginBottom: 12 }}>
             <h4>Data timestamp: {timestampInfo.displayWithTimezone}</h4>
-              ({timeAgo})
+              <p className='no-print'>({timeAgo})</p>
           </div>
         )}
         {measurementsData.map((row, idx) => (

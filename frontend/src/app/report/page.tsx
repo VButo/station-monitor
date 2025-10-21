@@ -135,7 +135,9 @@ export default function ReportPage() {
           width: 100% !important;
           margin: 0;
           padding: 20px;
-          box-shadow: none;
+          box-shadow: none !important;
+          border: none !important;
+          border-radius: 0 !important;
           background: white !important;
         }
         
@@ -147,18 +149,29 @@ export default function ReportPage() {
           align-items: center !important;
           gap: 0 !important;
           border-bottom: 1px solid #eef1f4 !important;
-          padding: 12px 0 !important;
-          font-size: 14px !important;
+          padding: 3px 0 !important;
+          font-size: 8px !important;
+        }
+        
+        /* Alternating row backgrounds */
+        .kv-row:nth-child(even) {
+          background-color: #f8f9fa !important;
+        }
+        
+        .kv-row:nth-child(odd) {
+          background-color: white !important;
         }
         
         .kv-key, .kv-value {
           width: 50% !important;
           text-align: left !important;
+          font-size: 8px !important;
         }
         
         .kv-key {
           font-weight: 500 !important;
           color: #8593a5 !important;
+          font-size: 8px !important;
         }
         
         .kv-value {
@@ -167,6 +180,7 @@ export default function ReportPage() {
           letter-spacing: 0.3px !important;
           font-weight: 400 !important;
           word-break: break-word !important;
+          font-size: 8px !important;
         }
         
         /* Hide print button and other no-print elements */

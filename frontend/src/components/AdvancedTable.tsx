@@ -59,11 +59,24 @@ export default function AdvancedTable({
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string>('');
+  const [isMobile, setIsMobile] = useState(false);
   
   const columnSelectorRef = useRef<HTMLDivElement>(null);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const desktopColumnPanelRef = useRef<HTMLDivElement>(null);
   const mobileColumnDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Mobile detection hook
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024); // lg breakpoint in Tailwind
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Persistence hook for saving/loading table state
   const {
@@ -236,10 +249,10 @@ export default function AdvancedTable({
     
     // Restore grid state after a short delay to ensure columns are ready
     setTimeout(() => {
-      restoreGridState(params.api);
+      restoreGridState(params.api, isMobile);
       updateCounts();
     }, 100);
-  }, [updateCounts, restoreGridState]);
+  }, [updateCounts, restoreGridState, isMobile]);
 
   // Save grid state when filters/sorts change
   useEffect(() => {
@@ -297,7 +310,7 @@ export default function AdvancedTable({
     
     switch (groupName) {
       case 'station':
-        // Exclude pinned columns (label_id, label_name, label_type) - they're always visible
+        // Exclude pinned columns (label_id, label_name, label_type) - they're pinned on desktop but configurable on mobile
         columnsToToggle = [
           'label', 'latitude', 'longitude', 'altitude', 
           'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
@@ -342,7 +355,7 @@ export default function AdvancedTable({
 
     switch (groupName) {
       case 'station':
-        // Exclude pinned columns (label_id, label_name, label_type) - they're always visible
+        // Exclude pinned columns (label_id, label_name, label_type) - they're pinned on desktop but configurable on mobile
         columnsInGroup = [
           'label', 'latitude', 'longitude', 'altitude', 
           'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
@@ -556,11 +569,11 @@ export default function AdvancedTable({
 
     const columns: ColDef[] = [];
 
-    // Always include pinned basic columns
+    // Always include basic columns (pinned on desktop, not pinned on mobile)
     columns.push({
       headerName: 'ID',
       field: 'label_id',
-      pinned: 'left',
+      pinned: isMobile ? undefined : 'left',
       minWidth: 80,
       maxWidth: 100,
       cellStyle: { fontWeight: '600' },
@@ -571,7 +584,7 @@ export default function AdvancedTable({
     columns.push({
       headerName: 'Name',
       field: 'label_name',
-      pinned: 'left',
+      pinned: isMobile ? undefined : 'left',
       minWidth: 200,
       flex: 1,
       cellStyle: { fontWeight: '600', fontSize: '16px' },
@@ -582,7 +595,7 @@ export default function AdvancedTable({
     columns.push({
       headerName: 'Type',
       field: 'label_type',
-      pinned: 'left',
+      pinned: isMobile ? undefined : 'left',
       minWidth: 100,
       maxWidth: 120,
       filter: 'agTextColumnFilter',
@@ -914,7 +927,26 @@ export default function AdvancedTable({
     });
 
     return columns;
-  }, [selectedColumns, columnStructure, stationData]);
+  }, [selectedColumns, columnStructure, stationData, isMobile]);
+
+  // Update column pinning when mobile state changes
+  useEffect(() => {
+    if (gridApi) {
+      // Force update the pinning of basic columns based on mobile state
+      const currentColumnState = gridApi.getColumnState();
+      const updatedColumnState = currentColumnState.map(col => {
+        if (col.colId === 'label_id' || col.colId === 'label_name' || col.colId === 'label_type') {
+          return { ...col, pinned: isMobile ? null : 'left' as const };
+        }
+        return col;
+      });
+      
+      gridApi.applyColumnState({
+        state: updatedColumnState,
+        applyOrder: true,
+      });
+    }
+  }, [gridApi, isMobile]);
 
   if (loading) {
     return (
@@ -944,23 +976,736 @@ export default function AdvancedTable({
   }
 
   return (
-    <div className={`flex ${className}`}>
-      {/* Desktop Side Panel */}
-      {showColumnSelector && (
-        <div
-          ref={desktopColumnPanelRef}
-          className="hidden lg:flex w-92 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden flex-col mr-4"
-          style={{ height }}
-        >
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-            <h3 className="font-medium text-gray-900">Column Visibility</h3>
-            <button
-              onClick={() => setShowColumnSelector(false)}
-              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-            >
-              ×
-            </button>
+    <div className={`flex flex-col ${className}`}>
+      {/* Controls Section */}
+      {showControls && (
+        <div className="mb-4">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm max-w-5xl mx-auto p-4">
+            {/* Mobile layout - 2 rows */}
+            <div className="flex flex-col gap-4 md:hidden">
+              {/* First row: Columns button and search */}
+              <div className="flex items-center gap-3">
+                {/* Column Selector */}
+                <div className="relative" ref={columnSelectorRef}>
+                  <button
+                    onClick={() => setShowColumnSelector(!showColumnSelector)}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
+                  >
+                    Columns
+                  </button>
+              
+              {/* Mobile Column Dropdown (only show on smaller screens when desktop side panel is not visible) */}
+              {showColumnSelector && (
+                <div 
+                  ref={mobileColumnDropdownRef}
+                  className="lg:hidden absolute left-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto"
+                >
+                  <div className="p-4 border-b border-gray-200">
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={showAllColumns}
+                        className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                      >
+                        Show All
+                      </button>
+                      <button
+                        onClick={hideAllColumns}
+                        className="px-3 py-1.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
+                      >
+                        Hide All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto p-4 space-y-2">
+                    {/* Station Group */}
+                    <div className="border-b border-gray-200">
+                      <button
+                        onClick={(e) => {
+                          // Prevent group toggle if clicking on checkbox
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('station');
+                        }}
+                        className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {expandedGroup === 'station' ? '▼' : '▶'}
+                          </span>
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('station')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('station', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">🏢 Station</span>
+                        </div>
+                      </button>
+                      {expandedGroup === 'station' && (
+                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          {[
+                            { id: 'label', label: 'Label' },
+                            { id: 'latitude', label: 'Latitude' },
+                            { id: 'longitude', label: 'Longitude' },
+                            { id: 'altitude', label: 'Altitude' },
+                            { id: 'ip_address', label: 'IP Address' },
+                            { id: 'sms_number', label: 'SMS Number' },
+                            { id: 'online_24h_avg', label: 'Online 24h Avg' },
+                            { id: 'online_7d_avg', label: 'Online 7d Avg' },
+                            { id: 'online_24h_graph', label: 'Online 24h Graph' },
+                            { id: 'online_last_seen', label: 'Online Last Seen' },
+                            { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
+                            { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
+                          ].map(({ id, label }) => (
+                            <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has(id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility(id, e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Public Data Group */}
+                    {stationData.length > 0 && Object.keys(columnStructure.public_data).length > 0 && (
+                      <div className="border-b border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                              return;
+                            }
+                            handleGroupClick('public-data');
+                          }}
+                          className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-400">
+                              {expandedGroup === 'public-data' ? '▼' : '▶'}
+                            </span>
+                            <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <ThreeStateCheckbox
+                                state={getGroupState('public-data')}
+                                onChange={(checked) => {
+                                  toggleColumnGroup('public-data', checked);
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-gray-700">🌐 Public Data ({Object.keys(columnStructure.public_data).length})</span>
+                          </div>
+                        </button>
+                        {expandedGroup === 'public-data' && (
+                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                            <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has('public_timestamp')}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility('public_timestamp', e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="font-medium">📅 Timestamp</span>
+                            </label>
+                            {Object.keys(columnStructure.public_data).map(key => {
+                              const colId = `public_data.${key}`;
+                              return (
+                                <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedColumns.has(colId)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleColumnVisibility(colId, e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span>{key}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Status Data Group */}
+                    {stationData.length > 0 && Object.keys(columnStructure.status_data).length > 0 && (
+                      <div className="border-b border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                              return;
+                            }
+                            handleGroupClick('status-data');
+                          }}
+                          className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-400">
+                              {expandedGroup === 'status-data' ? '▼' : '▶'}
+                            </span>
+                            <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <ThreeStateCheckbox
+                                state={getGroupState('status-data')}
+                                onChange={(checked) => {
+                                  toggleColumnGroup('status-data', checked);
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-gray-700">📊 Status Data ({Object.keys(columnStructure.status_data).length})</span>
+                          </div>
+                        </button>
+                        {expandedGroup === 'status-data' && (
+                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                            <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has('status_timestamp')}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility('status_timestamp', e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="font-medium">📅 Timestamp</span>
+                            </label>
+                            {Object.keys(columnStructure.status_data).map(key => {
+                              const colId = `status_data.${key}`;
+                              return (
+                                <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedColumns.has(colId)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleColumnVisibility(colId, e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span>{key}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Measurements Group */}
+                    <div>
+                      <button
+                        onClick={(e) => {
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('measurements');
+                        }}
+                        className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {expandedGroup === 'measurements' ? '▼' : '▶'}
+                          </span>
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('measurements')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('measurements', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">📋 Measurements ({Object.keys(columnStructure.measurements_data).length})</span>
+                        </div>
+                      </button>
+                      {expandedGroup === 'measurements' && (
+                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.has('measurements_timestamp')}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                toggleColumnVisibility('measurements_timestamp', e.target.checked);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="font-medium">📅 Timestamp</span>
+                          </label>
+                          {Object.keys(columnStructure.measurements_data).map(key => {
+                            const colId = `measurements_data.${key}`;
+                            return (
+                              <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedColumns.has(colId)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleColumnVisibility(colId, e.target.checked);
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                <span>{key}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search stations..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+              </div>
+
+              {/* Second row: Reset, station count, and export */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {/* Reset Button */}
+                  <button
+                    onClick={resetToDefault}
+                    className="text-sm text-gray-500 hover:text-gray-700 underline whitespace-nowrap"
+                  >
+                    Reset
+                  </button>
+
+                  <div className="text-sm text-gray-600 whitespace-nowrap">
+                    {isFiltered ? (
+                      <>Showing {filteredCount} of {rowCount} stations</>
+                    ) : (
+                      <>{rowCount} stations</>
+                    )}
+                  </div>
+                </div>
+
+                {/* Export Button */}
+                <div className="relative" ref={exportDropdownRef}>
+                  <button
+                    onClick={() => setShowExportDropdown(!showExportDropdown)}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
+                  >
+                    Export ▼
+                  </button>
+                  
+                  {showExportDropdown && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                      <div className="py-1">
+                        <button
+                          onClick={exportToExcel}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          📊 Export to Excel
+                        </button>
+                        <button
+                          onClick={exportToCSV}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          📄 Export to CSV
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop layout - everything on one line */}
+            <div className="hidden md:flex md:items-center md:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {/* Column Selector */}
+                <div className="relative" ref={columnSelectorRef}>
+                  <button
+                    onClick={() => setShowColumnSelector(!showColumnSelector)}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
+                  >
+                    Columns
+                  </button>
+              
+              {/* Mobile Column Dropdown (only show on smaller screens when desktop side panel is not visible) */}
+              {showColumnSelector && (
+                <div 
+                  ref={mobileColumnDropdownRef}
+                  className="lg:hidden absolute left-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto"
+                >
+                  <div className="p-4 border-b border-gray-200">
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={showAllColumns}
+                        className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                      >
+                        Show All
+                      </button>
+                      <button
+                        onClick={hideAllColumns}
+                        className="px-3 py-1.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
+                      >
+                        Hide All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto p-4 space-y-2">
+                    {/* Station Group */}
+                    <div className="border-b border-gray-200">
+                      <button
+                        onClick={(e) => {
+                          // Prevent group toggle if clicking on checkbox
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('station');
+                        }}
+                        className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {expandedGroup === 'station' ? '▼' : '▶'}
+                          </span>
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('station')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('station', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">🏢 Station</span>
+                        </div>
+                      </button>
+                      {expandedGroup === 'station' && (
+                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          {[
+                            { id: 'label', label: 'Label' },
+                            { id: 'latitude', label: 'Latitude' },
+                            { id: 'longitude', label: 'Longitude' },
+                            { id: 'altitude', label: 'Altitude' },
+                            { id: 'ip_address', label: 'IP Address' },
+                            { id: 'sms_number', label: 'SMS Number' },
+                            { id: 'online_24h_avg', label: 'Online 24h Avg' },
+                            { id: 'online_7d_avg', label: 'Online 7d Avg' },
+                            { id: 'online_24h_graph', label: 'Online 24h Graph' },
+                            { id: 'online_last_seen', label: 'Online Last Seen' },
+                            { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
+                            { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
+                          ].map(({ id, label }) => (
+                            <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has(id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility(id, e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Public Data Group */}
+                    {stationData.length > 0 && Object.keys(columnStructure.public_data).length > 0 && (
+                      <div className="border-b border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                              return;
+                            }
+                            handleGroupClick('public-data');
+                          }}
+                          className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-400">
+                              {expandedGroup === 'public-data' ? '▼' : '▶'}
+                            </span>
+                            <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <ThreeStateCheckbox
+                                state={getGroupState('public-data')}
+                                onChange={(checked) => {
+                                  toggleColumnGroup('public-data', checked);
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-gray-700">🌐 Public Data ({Object.keys(columnStructure.public_data).length})</span>
+                          </div>
+                        </button>
+                        {expandedGroup === 'public-data' && (
+                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                            <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has('public_timestamp')}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility('public_timestamp', e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="font-medium">📅 Timestamp</span>
+                            </label>
+                            {Object.keys(columnStructure.public_data).map(key => {
+                              const colId = `public_data.${key}`;
+                              return (
+                                <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedColumns.has(colId)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleColumnVisibility(colId, e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span>{key}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Status Data Group */}
+                    {stationData.length > 0 && Object.keys(columnStructure.status_data).length > 0 && (
+                      <div className="border-b border-gray-200">
+                        <button
+                          onClick={(e) => {
+                            if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                              return;
+                            }
+                            handleGroupClick('status-data');
+                          }}
+                          className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-400">
+                              {expandedGroup === 'status-data' ? '▼' : '▶'}
+                            </span>
+                            <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <ThreeStateCheckbox
+                                state={getGroupState('status-data')}
+                                onChange={(checked) => {
+                                  toggleColumnGroup('status-data', checked);
+                                }}
+                              />
+                            </div>
+                            <span className="font-medium text-gray-700">📊 Status Data ({Object.keys(columnStructure.status_data).length})</span>
+                          </div>
+                        </button>
+                        {expandedGroup === 'status-data' && (
+                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                            <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedColumns.has('status_timestamp')}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleColumnVisibility('status_timestamp', e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="font-medium">📅 Timestamp</span>
+                            </label>
+                            {Object.keys(columnStructure.status_data).map(key => {
+                              const colId = `status_data.${key}`;
+                              return (
+                                <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedColumns.has(colId)}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleColumnVisibility(colId, e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span>{key}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Measurements Group */}
+                    <div>
+                      <button
+                        onClick={(e) => {
+                          if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                            return;
+                          }
+                          handleGroupClick('measurements');
+                        }}
+                        className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="text-gray-400">
+                            {expandedGroup === 'measurements' ? '▼' : '▶'}
+                          </span>
+                          <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                            <ThreeStateCheckbox
+                              state={getGroupState('measurements')}
+                              onChange={(checked) => {
+                                toggleColumnGroup('measurements', checked);
+                              }}
+                            />
+                          </div>
+                          <span className="font-medium text-gray-700">📋 Measurements ({Object.keys(columnStructure.measurements_data).length})</span>
+                        </div>
+                      </button>
+                      {expandedGroup === 'measurements' && (
+                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedColumns.has('measurements_timestamp')}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                toggleColumnVisibility('measurements_timestamp', e.target.checked);
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <span className="font-medium">📅 Timestamp</span>
+                          </label>
+                          {Object.keys(columnStructure.measurements_data).map(key => {
+                            const colId = `measurements_data.${key}`;
+                            return (
+                              <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedColumns.has(colId)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleColumnVisibility(colId, e.target.checked);
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                <span>{key}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search stations..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+            </div>
+
+                {/* Reset Button */}
+                <button
+                  onClick={resetToDefault}
+                  className="text-sm text-gray-500 hover:text-gray-700 underline whitespace-nowrap"
+                >
+                  Reset
+                </button>
+
+                <div className="text-sm text-gray-600 whitespace-nowrap">
+                  {isFiltered ? (
+                    <>Showing {filteredCount} of {rowCount} stations</>
+                  ) : (
+                    <>{rowCount} stations</>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Export Button */}
+                <div className="relative" ref={exportDropdownRef}>
+                  <button
+                    onClick={() => setShowExportDropdown(!showExportDropdown)}
+                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
+                  >
+                    Export ▼
+                  </button>
+                  
+                  {showExportDropdown && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+                      <div className="py-1">
+                        <button
+                          onClick={exportToExcel}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          📊 Export to Excel
+                        </button>
+                        <button
+                          onClick={exportToCSV}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                        >
+                          📄 Export to CSV
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* Table and Column Selector Container */}
+      <div className="flex">
+        {/* Desktop Side Panel */}
+        {showColumnSelector && (
+          <div
+            ref={desktopColumnPanelRef}
+            className="hidden lg:flex w-132 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden flex-col mr-4"
+            style={{ height: 'calc(100vh - 320px)' }}
+          >
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="font-medium text-gray-900">Column Visibility</h3>
+              <button
+                onClick={() => setShowColumnSelector(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
           
           <div className="p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
             <div className="flex gap-2">
@@ -1009,7 +1754,7 @@ export default function AdvancedTable({
               </button>
               {expandedGroup === 'station' && (
                 <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
-                  {/* Note: ID, Name, and Type are always pinned left and not configurable */}
+                  {/* Note: ID, Name, and Type are pinned left on desktop but not pinned on mobile */}
                   {[
                     { id: 'label', label: 'Label' },
                     { id: 'latitude', label: 'Latitude' },
@@ -1239,228 +1984,6 @@ export default function AdvancedTable({
           </div>
         </div>
       )}
-
-      {/* Main Content Area */}
-      <div className="flex flex-col flex-1" style={{ height }}>
-        {showControls && (
-          <div className="mb-4">
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm max-w-5xl mx-auto p-4">
-              {/* Mobile layout - 2 rows */}
-              <div className="flex flex-col gap-4 md:hidden">
-                {/* First row: Columns button and search */}
-                <div className="flex items-center gap-3">
-                  {/* Column Selector */}
-                  <div className="relative" ref={columnSelectorRef}>
-                    <button
-                      onClick={() => setShowColumnSelector(!showColumnSelector)}
-                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
-                    >
-                      Columns
-                    </button>
-                
-                {/* Mobile Column Dropdown (only show on smaller screens when desktop side panel is not visible) */}
-                {showColumnSelector && (
-                  <div 
-                    ref={mobileColumnDropdownRef}
-                    className="lg:hidden absolute left-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto"
-                  >
-                    <div className="p-4 border-b border-gray-200">
-                      <div className="flex gap-2 mb-3">
-                        <button
-                          onClick={showAllColumns}
-                          className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                        >
-                          Show All
-                        </button>
-                        <button
-                          onClick={hideAllColumns}
-                          className="px-3 py-1.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
-                        >
-                          Hide All
-                        </button>
-                      </div>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto p-4 space-y-2">
-                      <div className="text-sm text-gray-600">Column groups will be shown here</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search stations..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-              </div>
-                </div>
-
-                {/* Second row: Reset, station count, and export */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    {/* Reset Button */}
-                    <button
-                      onClick={resetToDefault}
-                      className="text-sm text-gray-500 hover:text-gray-700 underline whitespace-nowrap"
-                    >
-                      Reset
-                    </button>
-
-                    <div className="text-sm text-gray-600 whitespace-nowrap">
-                      {isFiltered ? (
-                        <>Showing {filteredCount} of {rowCount} stations</>
-                      ) : (
-                        <>{rowCount} stations</>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Export Button */}
-                  <div className="relative" ref={exportDropdownRef}>
-                    <button
-                      onClick={() => setShowExportDropdown(!showExportDropdown)}
-                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
-                    >
-                      Export ▼
-                    </button>
-                    
-                    {showExportDropdown && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
-                        <div className="py-1">
-                          <button
-                            onClick={exportToExcel}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          >
-                            📊 Export to Excel
-                          </button>
-                          <button
-                            onClick={exportToCSV}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          >
-                            📄 Export to CSV
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Desktop layout - everything on one line */}
-              <div className="hidden md:flex md:items-center md:justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  {/* Column Selector */}
-                  <div className="relative" ref={columnSelectorRef}>
-                    <button
-                      onClick={() => setShowColumnSelector(!showColumnSelector)}
-                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
-                    >
-                      Columns
-                    </button>
-                
-                {/* Mobile Column Dropdown (only show on smaller screens when desktop side panel is not visible) */}
-                {showColumnSelector && (
-                  <div 
-                    ref={mobileColumnDropdownRef}
-                    className="lg:hidden absolute left-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto"
-                  >
-                    <div className="p-4 border-b border-gray-200">
-                      <div className="flex gap-2 mb-3">
-                        <button
-                          onClick={showAllColumns}
-                          className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                        >
-                          Show All
-                        </button>
-                        <button
-                          onClick={hideAllColumns}
-                          className="px-3 py-1.5 text-xs bg-gray-500 text-white rounded hover:bg-gray-600"
-                        >
-                          Hide All
-                        </button>
-                      </div>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto p-4 space-y-2">
-                      <div className="text-sm text-gray-600">Column groups will be shown here</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search stations..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-              </div>
-
-                  {/* Reset Button */}
-                  <button
-                    onClick={resetToDefault}
-                    className="text-sm text-gray-500 hover:text-gray-700 underline whitespace-nowrap"
-                  >
-                    Reset
-                  </button>
-
-                  <div className="text-sm text-gray-600 whitespace-nowrap">
-                    {isFiltered ? (
-                      <>Showing {filteredCount} of {rowCount} stations</>
-                    ) : (
-                      <>{rowCount} stations</>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {/* Export Button */}
-                  <div className="relative" ref={exportDropdownRef}>
-                    <button
-                      onClick={() => setShowExportDropdown(!showExportDropdown)}
-                      className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 whitespace-nowrap"
-                    >
-                      Export ▼
-                    </button>
-                    
-                    {showExportDropdown && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
-                        <div className="py-1">
-                          <button
-                            onClick={exportToExcel}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          >
-                            📊 Export to Excel
-                          </button>
-                          <button
-                            onClick={exportToCSV}
-                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          >
-                            📄 Export to CSV
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Table */}
         <div 

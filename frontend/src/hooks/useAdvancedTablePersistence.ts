@@ -83,7 +83,7 @@ export function useAdvancedTablePersistence() {
   }, [saveState]);
 
   // Restore grid-specific state
-  const restoreGridState = useCallback((gridApi: GridApi) => {
+  const restoreGridState = useCallback((gridApi: GridApi, isMobile?: boolean) => {
     if (!gridApi) return;
     
     try {
@@ -92,8 +92,20 @@ export function useAdvancedTablePersistence() {
       if (state.gridState) {
         // Restore column state (order, width, visibility)
         if (state.gridState.columnState) {
+          let columnState = state.gridState.columnState;
+          
+          // If we're on mobile, remove pinning from basic columns to ensure responsive behavior
+          if (isMobile) {
+            columnState = columnState.map(col => {
+              if (col.colId === 'label_id' || col.colId === 'label_name' || col.colId === 'label_type') {
+                return { ...col, pinned: null };
+              }
+              return col;
+            });
+          }
+          
           gridApi.applyColumnState({
-            state: state.gridState.columnState,
+            state: columnState,
             applyOrder: true,
           });
         }

@@ -21,18 +21,34 @@ export interface OnlineData7d {
   hour_bucket_local: string[];
 }
 
-export const getOverviewData = async (): Promise<OverviewData[]> => {
+export const getOverviewData24h = async (): Promise<OverviewData[]> => {
   try {
-    const { data, error } = await supabase.rpc('get_overview_data');
+    const { data, error } = await supabase.rpc('get_overview_data_24h');
 
     if (error) {
       console.error('Error fetching overview data:', error);
-      throw new Error('Failed to fetch overview data');
+      throw new Error('Failed to fetch overview data for the last 24 hours');
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error in getOverviewData:', error);
+    console.error('Error in getOverviewData24h:', error);
+    throw error;
+  }
+};
+
+export const getOverviewData7d = async (): Promise<OverviewData[]> => {
+  try {
+    const { data, error } = await supabase.rpc('get_overview_data_7d');
+
+    if (error) {
+      console.error('Error fetching overview data:', error);
+      throw new Error('Failed to fetch overview data for the last 7 days');
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error in getOverviewData7d:', error);
     throw error;
   }
 };

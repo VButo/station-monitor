@@ -36,6 +36,19 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
   const [isFiltered, setIsFiltered] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [gridApi, setGridApi] = useState<GridApi | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Mobile detection hook
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024); // lg breakpoint in Tailwind
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Reset function to clear search, filters, and sorts
   const resetTable = () => {
@@ -97,11 +110,44 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
   };
 
   const columnDefs: ColDef<RowData>[] = [
-    { headerName: 'ID', field: 'label_id', minWidth: 50, maxWidth: 70 },
-    { headerName: 'Name', field: 'label_text', cellStyle: { fontWeight: '600', fontSize: '16px' }, minWidth: 250, flex: 1 },
-    { headerName: 'Type', field: 'label_type', minWidth: 50, maxWidth: 80 },
-    { headerName: 'Health (24h)', field: 'avg_data_health_24h', minWidth: 100, maxWidth: 180, valueFormatter: params => params.value != null ? `${params.value}%` : '' },
-    { headerName: 'Online (24h)', field: 'avg_fetch_health_24h', minWidth: 100, maxWidth: 180, valueFormatter: params => params.value != null ? `${params.value}%` : '' },
+    { 
+      headerName: 'ID', 
+      field: 'label_id', 
+      minWidth: isMobile ? 70 : 50, 
+      width: isMobile ? 80 : undefined,
+      maxWidth: isMobile ? 90 : 70 
+    },
+    { 
+      headerName: 'Name', 
+      field: 'label_text', 
+      cellStyle: { fontWeight: '600', fontSize: '16px' }, 
+      minWidth: isMobile ? 150 : 250, 
+      width: isMobile ? 200 : undefined,
+      flex: isMobile ? undefined : 1 
+    },
+    { 
+      headerName: 'Type', 
+      field: 'label_type', 
+      minWidth: isMobile ? 70 : 50, 
+      width: isMobile ? 90 : undefined,
+      maxWidth: isMobile ? 100 : 80 
+    },
+    { 
+      headerName: 'Health (24h)', 
+      field: 'avg_data_health_24h', 
+      minWidth: isMobile ? 90 : 100, 
+      width: isMobile ? 110 : undefined,
+      maxWidth: isMobile ? 130 : 180, 
+      valueFormatter: params => params.value != null ? `${params.value}%` : '' 
+    },
+    { 
+      headerName: 'Online (24h)', 
+      field: 'avg_fetch_health_24h', 
+      minWidth: isMobile ? 90 : 100, 
+      width: isMobile ? 110 : undefined,
+      maxWidth: isMobile ? 130 : 180, 
+      valueFormatter: params => params.value != null ? `${params.value}%` : '' 
+    },
     {
       headerName: 'Online graph (24h)',
       field: 'status',
@@ -111,8 +157,9 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
       }),
       sortable: false,
       filter: false,
-      minWidth: 120,
-      flex: 1
+      minWidth: isMobile ? 200 : 180,
+      width: isMobile ? 250 : undefined,
+      flex: isMobile ? undefined : 2
     }
   ];
 
@@ -164,14 +211,28 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
 
       {/* Table Container - Constrained Width */}
       <div className="flex-1 w-full">
-        <div className="max-w-5xl mx-auto bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="ag-theme-alpine" style={{ height: 'calc(100vh - 320px)', minWidth: 600 }}>
+        <div className={`${isMobile ? 'overflow-x-auto' : 'max-w-5xl mx-auto'} bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden`}>
+          <div 
+            className="ag-theme-alpine" 
+            style={{ 
+              height: 'calc(100vh - 320px)', 
+              minWidth: isMobile ? '800px' : '600px',
+              width: isMobile ? 'max-content' : '100%'
+            }}
+          >
             <AgGridReact
               rowData={filteredData}
               columnDefs={columnDefs}
               pagination={false}
               paginationPageSize={50}
-              defaultColDef={{ sortable: true, filter: true, resizable: true, flex: 1 }}
+              defaultColDef={{ 
+                sortable: true, 
+                filter: true, 
+                resizable: true, 
+                flex: isMobile ? undefined : 1,
+                minWidth: isMobile ? 80 : 50,
+                suppressSizeToFit: isMobile
+              }}
               onGridReady={onGridReady}
               onModelUpdated={onModelUpdated}
               onFilterChanged={onFilterChanged}
@@ -180,6 +241,8 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
                 console.log('Row clicked, station ID:', id);
                 onRowClick(id);
               }}
+              suppressHorizontalScroll={false}
+              alwaysShowHorizontalScroll={isMobile}
             />
           </div>
         </div>

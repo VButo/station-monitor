@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute'
 import dynamic from 'next/dynamic';
-import { getOverviewData, getOnlineData24h, getOnlineData7d } from '@/utils/api';
+import { getOverviewData24h, getOverviewData7d, getOnlineData24h, getOnlineData7d } from '@/utils/api';
 
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -271,8 +271,13 @@ function OverviewPageContent() {
         setLoading(true);
         setError(null);
         
+        // Use period-specific overview data
+        const overviewPromise = timePeriod === '24h' 
+          ? getOverviewData24h()
+          : getOverviewData7d();
+        
         const [overview] = await Promise.all([
-          getOverviewData(),
+          overviewPromise,
           fetchChartData(timePeriod)
         ]);
         
@@ -747,7 +752,7 @@ function OverviewPageContent() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Station Overview</h1>
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-sm text-gray-500">Show last</span>
+            <span className="text-sm text-gray-500">Overview data for the last</span>
             <div className="relative">
               <select
                 value={timePeriod}

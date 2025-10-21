@@ -43,7 +43,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         setUser(null);
         
         // If we're on a protected route and user fetch fails, redirect to login
-        const protectedRoutes = ['/network', '/overview', '/advanced', '/station', '/report'];
+        const protectedRoutes = ['/network', '/overview', '/station', '/report'];
         const isProtectedRoute = protectedRoutes.some(route => 
           pathname.startsWith(route)
         );
@@ -76,7 +76,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     }
   };
 
-  const isFullPage = pathname==='/advanced' || pathname === '/station' || pathname === '/login';
+  const isFullPage = pathname === '/station' || pathname === '/login';
 
   if (loading) {
     return (

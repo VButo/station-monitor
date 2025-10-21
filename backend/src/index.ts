@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import stationRoutes from './routes/stationRoutes';
-import measurementRoutes from './routes/measurementRoutes';
 import userRoutes from './routes/userRoutes';
 import overviewRoutes from './routes/overviewRoutes';
 import { errorHandler } from './middleware/errorHandler';
@@ -35,7 +34,6 @@ app.use(cookieParser());
 // app.use(authMiddleware);
 
 app.use('/api/stations', stationRoutes);
-app.use('/api/measurements', measurementRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api', overviewRoutes);
 

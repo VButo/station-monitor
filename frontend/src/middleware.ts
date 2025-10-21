@@ -5,48 +5,32 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get('supabase-token')?.value
   
   // List of protected routes that require authentication
-  const protectedRoutes = ['/simple', '/overview', '/advanced', '/station']
+  const protectedRoutes = ['/network', '/overview', '/station', '/report']
   const isProtectedRoute = protectedRoutes.some(route => 
     request.nextUrl.pathname.startsWith(route)
   )
   
-  // Skip validation for login page and public routes
-  if (request.nextUrl.pathname === '/login' || 
-      request.nextUrl.pathname === '/' || 
-      !isProtectedRoute) {
-    
-    // If logged in and trying to access login page, redirect to simple
-    if (token && request.nextUrl.pathname === '/login') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/simple'
-      return NextResponse.redirect(url)
-    }
-    
-    // If accessing root and logged in, redirect to simple
-    if (token && request.nextUrl.pathname === '/') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/simple'
-      return NextResponse.redirect(url)
-    }
-    
-    // If accessing root and not logged in, redirect to login
-    if (!token && request.nextUrl.pathname === '/') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      return NextResponse.redirect(url)
-    }
-    
-    return NextResponse.next()
-  }
-  
-  // For protected routes, validate the token
-  if (!token) {
+  // If no token and accessing protected route, redirect to login
+  if (!token && isProtectedRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
   
-  // Validate token by making API call
+  // If no token and accessing root, redirect to login
+  if (!token && request.nextUrl.pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+  
+  // If no token, allow through (login page, etc.)
+  if (!token) {
+    return NextResponse.next()
+  }
+  
+  // Token exists - validate it before making routing decisions
+  let isValidToken = false
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
     const response = await fetch(`${apiUrl}/users/me`, {
@@ -55,17 +39,34 @@ export async function middleware(request: NextRequest) {
       },
     })
     
-    if (!response.ok || response.status === 401) {
-      // Token is invalid/expired, clear it and redirect to login
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      const redirectResponse = NextResponse.redirect(url)
-      redirectResponse.cookies.delete('supabase-token')
-      return redirectResponse
-    }
+    isValidToken = response.ok && response.status !== 401
   } catch (error) {
-    // Network error or API down, allow through but let client handle
-    console.warn('Middleware: Unable to validate token, allowing request through:', error)
+    console.warn('Middleware: Unable to validate token:', error)
+    isValidToken = false
+  }
+  
+  // If token is invalid, clear it and redirect to login
+  if (!isValidToken) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    const redirectResponse = NextResponse.redirect(url)
+    redirectResponse.cookies.delete('supabase-token')
+    return redirectResponse
+  }
+  
+  // Token is valid - handle routing for authenticated users
+  // If trying to access login page with valid token, redirect to network
+  if (request.nextUrl.pathname === '/login') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/network'
+    return NextResponse.redirect(url)
+  }
+  
+  // If accessing root with valid token, redirect to network
+  if (request.nextUrl.pathname === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/network'
+    return NextResponse.redirect(url)
   }
   
   return NextResponse.next()

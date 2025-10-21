@@ -68,8 +68,13 @@ export interface OnlineData7d {
   hour_bucket_local: string[];
 }
 
-export const getOverviewData = async (): Promise<OverviewData[]> => {
-  const response = await api.get<{ data: OverviewData[] }>('/overview-data');
+export const getOverviewData24h = async (): Promise<OverviewData[]> => {
+  const response = await api.get<{ data: OverviewData[] }>('/overview-data-24h');
+  return response.data.data;
+};
+
+export const getOverviewData7d = async (): Promise<OverviewData[]> => {
+  const response = await api.get<{ data: OverviewData[] }>('/overview-data-7d');
   return response.data.data;
 };
 
