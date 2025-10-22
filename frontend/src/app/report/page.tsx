@@ -6,6 +6,7 @@ import PublicTab from '../station/[stationId]/components/PublicTab';
 import StatusTab from '../station/[stationId]/components/StatusTab';
 import MeasurementsTab from '../station/[stationId]/components/MeasurementsTab';
 import { convertCroatianTimeToDbSearchTime } from '@/utils/timezoneHelpers';
+import StationSelector from '@/components/StationSelector';
 
 export default function ReportPage() {
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
@@ -17,8 +18,6 @@ export default function ReportPage() {
 
   // Station search state
   const [stationsList, setStationsList] = useState<Station[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredStations, setFilteredStations] = useState<Station[]>([]);
 
   // Date and time selection state
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD format
@@ -35,17 +34,12 @@ export default function ReportPage() {
     fetchStations().then((stations) => setStationsList(stations));
   }, []);
 
-  // Filter stations based on search term
-  useEffect(() => {
-    const filtered = stationsList.filter((s) =>
-      s.label.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredStations(filtered);
-  }, [searchTerm, stationsList]);
+  // (Filtering is handled inside StationSelector)
 
   // Fetch data for selected station and datetime
-  const fetchReportData = async () => {
-    if (!selectedStation) return;
+  const fetchReportData = async (stationParam?: Station) => {
+    const stationToUse = stationParam ?? selectedStation
+    if (!stationToUse) return;
 
     setLoading(true);
     try {
@@ -55,9 +49,9 @@ export default function ReportPage() {
       console.log('Database search time:', datetime.toISOString());
       
       const [publicDataResult, statusDataResult, measurementsDataResult] = await Promise.all([
-        getPublicTableWithDatetime(selectedStation.id, datetime), // Now uses datetime parameter
-        getStatusTableWithDatetime(selectedStation.id, datetime), // Now uses datetime parameter 
-        getMeasurementsTableWithDatetime(selectedStation.id, datetime), // Now uses datetime parameter
+        getPublicTableWithDatetime(stationToUse.id, datetime),
+        getStatusTableWithDatetime(stationToUse.id, datetime),
+        getMeasurementsTableWithDatetime(stationToUse.id, datetime),
       ]);
 
       setPublicData(publicDataResult);
@@ -76,11 +70,14 @@ export default function ReportPage() {
 
   const handleStationSelect = (station: Station) => {
     setSelectedStation(station);
-    setSearchTerm('');
-    setFilteredStations([]);
-    // Auto-fetch data when station is selected
-    fetchReportData();
+    // Auto-fetch data for the station immediately
+    fetchReportData(station);
   };
+
+  const handleStationSelectById = (id: number) => {
+    const station = stationsList.find((s) => s.id === id)
+    if (station) handleStationSelect(station)
+  }
 
   const handleDateTimeChange = () => {
     if (selectedStation) {
@@ -263,63 +260,7 @@ export default function ReportPage() {
             <label htmlFor="station-search-input" style={{ display: 'block', marginBottom: 4, fontWeight: 500, color: '#315284', fontSize: 14 }}>
               Select Station
             </label>
-            <input
-              id="station-search-input"
-              type="text"
-              placeholder="Search stations..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                color: '#8593a5',
-                borderRadius: 6,
-                border: '1px solid #ccc',
-                fontSize: 16,
-                boxSizing: 'border-box',
-              }}
-            />
-
-            {searchTerm && filteredStations.length > 0 && (
-              <ul
-                style={{
-                  position: 'absolute',
-                  width: '100%',
-                  maxHeight: 200,
-                  overflowY: 'auto',
-                  background: 'white',
-                  border: '1px solid #ccc',
-                  borderRadius: 6,
-                  zIndex: 10,
-                  listStyle: 'none',
-                  margin: 0,
-                  padding: 0,
-                }}
-              >
-                {filteredStations.map((station) => (
-                  <button
-                    key={station.id}
-                    type="button"
-                    onClick={() => handleStationSelect(station)}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      padding: '10px 15px',
-                      cursor: 'pointer',
-                      border: 'none',
-                      borderBottom: '1px solid #eee',
-                      color: '#315284',
-                      background: 'white',
-                      textAlign: 'left',
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f5f5f5')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'white')}
-                  >
-                    {station.label}
-                  </button>
-                ))}
-              </ul>
-            )}
+            <StationSelector stations={stationsList} value={selectedStation?.id ?? -1} onSelect={handleStationSelectById} />
           </div>
 
           {/* Date Selection */}

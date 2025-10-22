@@ -25,6 +25,15 @@ function StationsPageContent() {
   const searchParams = useSearchParams()
 
   useEffect(() => {
+    // helper to find an entry by station_id without using array callbacks
+    const findByStationId = <T extends { station_id?: string | number }>(arr: T[] | undefined, stationId: string | number): T | undefined => {
+      if (!arr) return undefined
+      for (const item of arr) {
+        if (item && item.station_id === stationId) return item
+      }
+      return undefined
+    }
+
     const loadStations = async () => {
       try {
         setLoading(true)
@@ -37,34 +46,37 @@ function StationsPageContent() {
         
         setStations(stationsData)
         
-        // Prepare table row data
-        const tableData = stationsData.map((station) => {
-          const stationHealth = hourlyData.find(d => d.station_id === station.id)
-          return {
+        // Prepare table row data using loops (no nested callbacks)
+        const tableData: RowData[] = []
+        for (const station of stationsData) {
+          const stationHealth = findByStationId(hourlyData, station.id)
+          const avgData = findByStationId(avgStatusData, station.id)
+          tableData.push({
             id: station.id,
             label_id: station.label_id,
             label_text: station.label_name,
             label_type: station.label_type,
             status: stationHealth?.hourly_avg_array?.length === 24 ? stationHealth.hourly_avg_array : ('Error' as const),
             timestamps: stationHealth?.hour_bucket_local?.length === 24 ? stationHealth.hour_bucket_local : [],
-            avg_data_health_24h: avgStatusData.find(d => d.station_id === station.id)?.avg_data_health_24h || null,
-            avg_fetch_health_24h: avgStatusData.find(d => d.station_id === station.id)?.avg_fetch_health_24h || 0,
-          }
-        })
+            avg_data_health_24h: avgData?.avg_data_health_24h || null,
+            avg_fetch_health_24h: avgData?.avg_fetch_health_24h || 0,
+          })
+        }
         setTableRowData(tableData)
         
-        // Prepare list data
-        const listData = stationsData.map((station) => {
-          const avgData = avgStatusData.find(d => d.station_id === station.id)
-          return {
+        // Prepare list data using loops (no nested callbacks)
+        const listDataArr: StationListData[] = []
+        for (const station of stationsData) {
+          const avgData = findByStationId(avgStatusData, station.id)
+          listDataArr.push({
             id: station.id,
             label: station.label,
             ip: station.ip,
             online: avgData?.avg_fetch_health_24h || 0,
             health: avgData?.avg_data_health_24h || null,
-          }
-        })
-        setListData(listData)
+          })
+        }
+        setListData(listDataArr)
         
       } catch (err) {
         console.error('Error fetching stations:', err)

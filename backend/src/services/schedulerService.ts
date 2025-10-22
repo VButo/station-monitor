@@ -19,6 +19,11 @@ class AdvancedDataScheduler {
     // Cron pattern: second minute hour day month dayOfWeek
     // '0 9,19,29,39,49,59 * * * *' runs at 9, 19, 29, 39, 49, 59 minutes of every hour
     this.cronJob = cron.schedule('0 9,19,29,39,49,59 * * * *', async () => {
+      // Prevent overlapping runs: if previous job still running, skip this tick
+      if (this.isRunning) {
+        console.warn('[SCHEDULER] Previous fetch still running - skipping this scheduled run to avoid overlapping jobs');
+        return;
+      }
       await this.fetchDataJob();
     }, {
       timezone: "UTC" // Use UTC to avoid timezone issues
@@ -72,25 +77,26 @@ class AdvancedDataScheduler {
    */
   private async fetchDataJob(): Promise<any> {
     const startTime = advancedStationDataCache.recordFetchStart();
-    
+    this.isRunning = true; // mark as running
     try {
       console.log(`[SCHEDULER] Starting scheduled data fetch at ${new Date().toISOString()}`);
-      
+
       // Fetch fresh data from database
       const data = await fetchAdvancedStationData();
-      
+
       // Cache the data
       advancedStationDataCache.recordFetchSuccess(startTime, data);
-      
+
       console.log(`[SCHEDULER] Scheduled fetch completed successfully`);
       return data;
-      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       advancedStationDataCache.recordFetchError(startTime, errorMessage);
-      
+
       console.error('[SCHEDULER] Scheduled fetch failed:', error);
       throw error;
+    } finally {
+      this.isRunning = false; // clear running flag
     }
   }
 

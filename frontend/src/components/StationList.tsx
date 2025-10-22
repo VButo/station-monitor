@@ -230,6 +230,22 @@ export default function StationList({ stationListData, onStationClick, loading =
               <div className="p-8 text-center text-gray-500">No stations match your search</div>
             ) : (
               <div className="h-full overflow-y-auto">
+                {/* Slim header - aligns with desktop columns and stays visible while scrolling */}
+                <div className="hidden md:flex items-center w-full px-4 py-2 text-sm bg-gray-50 text-gray-500 sticky top-0 z-10">
+                  <div className="flex-[2]">
+                    Label
+                  </div>
+                  <div className="flex-1 text-center">
+                    IP
+                  </div>
+                  <div className="flex-1 text-center">
+                    Online 24h
+                  </div>
+                  <div className="flex-1 text-center">
+                    Health 24h
+                  </div>
+                </div>
+
                 <table className="w-full">
                   <tbody className="divide-y divide-gray-100">
                     {filteredData.map((station) => (
@@ -240,7 +256,7 @@ export default function StationList({ stationListData, onStationClick, loading =
               <td className="p-4">
                 {/* Desktop Layout - All in one row */}
                 <div className="hidden md:flex md:items-center md:w-full">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-[2] min-w-0">
                     <div className="text-lg font-semibold text-gray-900 truncate">
                       <button
                         type="button"
@@ -256,7 +272,7 @@ export default function StationList({ stationListData, onStationClick, loading =
                     </div>
                   </div>
                   
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 text-center">
                     <div className="text-lg text-gray-500">
                       {station.ip}
                     </div>
@@ -271,7 +287,6 @@ export default function StationList({ stationListData, onStationClick, loading =
                           data-prefix="fas"
                           data-icon="globe"
                           className="w-6 h-6"
-                          role="img"
                           xmlns="http://www.w3.org/2000/svg"
                           viewBox="0 0 640 640"
                           fill="currentColor"
@@ -283,7 +298,6 @@ export default function StationList({ stationListData, onStationClick, loading =
                         <span>{station.online}%</span>
                       </div>
                     </div>
-                    <div className="text-sm text-gray-500">Online 24h</div>
                   </div>
                   
                   <div className="flex-1 text-center">
@@ -295,7 +309,6 @@ export default function StationList({ stationListData, onStationClick, loading =
                         <span>{station.health === null ? 'No data' : `${station.health}%`}</span>
                       </div>
                     </div>
-                    <div className="text-sm text-gray-500">Health 24h</div>
                   </div>
                 </div>
 

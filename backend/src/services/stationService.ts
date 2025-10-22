@@ -205,18 +205,18 @@ function keyValueArrayToObject(keyValueArray: any[]): Record<string, string> {
 export async function fetchAdvancedStationData() {
   try {
     console.log('Starting fetchAdvancedStationData...');
-    
+
     // Test database connection first
     const connectionOk = await testDatabaseConnection();
     if (!connectionOk) {
       throw new Error('Database connection failed');
     }
-    
+
     // Fetch all basic data
     const stations = await fetchStations();
     console.log('Fetched stations count:', stations.length);
-    
-    // Fetch status data  
+
+    // Fetch status metadata (small set) first
     const [stationStatuses, avgStatuses] = await Promise.all([
       fetchStationStatus(),
       getAverageStatus()
@@ -225,99 +225,112 @@ export async function fetchAdvancedStationData() {
       stationStatuses: stationStatuses.length,
       avgStatuses: avgStatuses.length
     });
-    
-    // Fetch all table data for all stations
-    const advancedData = await Promise.all(
-      stations.map(async (station) => {
-        try {
-          // Fetch key-value data for each table
-          const [publicData, statusData, measurementsData] = await Promise.all([
-            getPublicTable(station.id).catch(() => []),
-            getStatusTable(station.id).catch(() => []),
-            getMeasurementsTable(station.id).catch(() => [])
-          ]);
 
-          // Debug logging
-          if (station.id === stations[0]?.id) { // Log for first station only
-            console.log(`Station ${station.id} data counts:`, {
-              publicData: publicData.length,
-              statusData: statusData.length,
-              measurementsData: measurementsData.length
-            });
-            
-            if (publicData.length > 0) {
-              console.log('Sample public data:', publicData.slice(0, 2));
-            }
+    // Concurrency control: limit number of stations processed in parallel
+    // to avoid exhausting the Supabase/PostgREST connection pool.
+    const concurrencyLimit = Number.parseInt(process.env.ADVANCED_FETCH_CONCURRENCY || '5', 10) || 5;
+    console.log(`Processing stations in batches with concurrency=${concurrencyLimit}`);
+
+    const advancedData: any[] = [];
+
+    // Helper: process a single station (keeps the original logic)
+    async function processStation(station: any) {
+      try {
+        // Fetch key-value data for each table (parallel for this station only)
+        const [publicData, statusData, measurementsData] = await Promise.all([
+          getPublicTable(station.id).catch(() => []),
+          getStatusTable(station.id).catch(() => []),
+          getMeasurementsTable(station.id).catch(() => [])
+        ]);
+
+        // Debug logging for first station
+        if (station.id === stations[0]?.id) {
+          console.log(`Station ${station.id} data counts:`, {
+            publicData: publicData.length,
+            statusData: statusData.length,
+            measurementsData: measurementsData.length
+          });
+
+          if (publicData.length > 0) {
+            console.log('Sample public data:', publicData.slice(0, 2));
           }
-
-          // Find corresponding status data
-          const hourlyStatus = stationStatuses.find((s: any) => s.station_id === station.id);
-          const avgStatus = avgStatuses.find((s: any) => s.station_id === station.id);
-
-          return {
-            // Basic station info
-            id: station.id,
-            label: station.label,
-            label_id: station.label_id,
-            label_name: station.label_name,
-            label_type: station.label_type,
-            latitude: station.latitude,
-            longitude: station.longitude,
-            altitude: station.altitude,
-            ip: station.ip,
-            sms_number: station.sms_number,
-            
-            // Status data
-            avg_fetch_health_7d: avgStatus?.avg_fetch_health_7d || 0,
-            avg_fetch_health_24h: avgStatus?.avg_fetch_health_24h || 0,
-            hourly_status: hourlyStatus?.hourly_avg_array || [],
-            hourly_timestamps: hourlyStatus?.hour_bucket_local || [],
-            avg_data_health_7d: avgStatus?.avg_data_health_7d || 0,
-            avg_data_health_24h: avgStatus?.avg_data_health_24h || 0,
-            
-            // Convert key-value arrays to objects
-            public_data: keyValueArrayToObject(publicData),
-            public_timestamp: publicData[0].station_timestamp,
-            status_data: keyValueArrayToObject(statusData),
-            status_timestamp: statusData[0]?.station_timestamp,
-            measurements_data: keyValueArrayToObject(measurementsData),
-            measurements_timestamp: measurementsData[0]?.station_timestamp,
-
-            // Metadata
-            last_updated: new Date().toISOString(),
-            total_measurements: measurementsData.length
-          };
-        } catch (error) {
-          console.error(`Error fetching data for station ${station.id}:`, error);
-          
-          // Return basic station data even if table data fails
-          return {
-            id: station.id,
-            label: station.label,
-            label_id: station.label_id,
-            label_name: station.label_name,
-            label_type: station.label_type,
-            latitude: station.latitude,
-            longitude: station.longitude,
-            altitude: station.altitude,
-            ip: station.ip,
-            sms_number: station.sms_number,
-            avg_fetch_health_7d: 0,
-            avg_data_health_7d: 0,
-            avg_fetch_health_24h: 0,
-            avg_data_health_24h: 0,
-            hourly_status: [],
-            public_data: {},
-            status_data: {},
-            measurements_data: {},
-            last_updated: new Date().toISOString(),
-            total_measurements: 0
-          };
         }
-      })
-    );
 
-    // Calculate all possible keys for dynamic columns
+        // Find corresponding status data
+        const hourlyStatus = stationStatuses.find((s: any) => s.station_id === station.id);
+        const avgStatus = avgStatuses.find((s: any) => s.station_id === station.id);
+
+        return {
+          // Basic station info
+          id: station.id,
+          label: station.label,
+          label_id: station.label_id,
+          label_name: station.label_name,
+          label_type: station.label_type,
+          latitude: station.latitude,
+          longitude: station.longitude,
+          altitude: station.altitude,
+          ip: station.ip,
+          sms_number: station.sms_number,
+
+          // Status data
+          avg_fetch_health_7d: avgStatus?.avg_fetch_health_7d || 0,
+          avg_fetch_health_24h: avgStatus?.avg_fetch_health_24h || 0,
+          hourly_status: hourlyStatus?.hourly_avg_array || [],
+          hourly_timestamps: hourlyStatus?.hour_bucket_local || [],
+          avg_data_health_7d: avgStatus?.avg_data_health_7d || 0,
+          avg_data_health_24h: avgStatus?.avg_data_health_24h || 0,
+
+          // Convert key-value arrays to objects
+          public_data: keyValueArrayToObject(publicData),
+          public_timestamp: publicData[0]?.station_timestamp,
+          status_data: keyValueArrayToObject(statusData),
+          status_timestamp: statusData[0]?.station_timestamp,
+          measurements_data: keyValueArrayToObject(measurementsData),
+          measurements_timestamp: measurementsData[0]?.station_timestamp,
+
+          // Metadata
+          last_updated: new Date().toISOString(),
+          total_measurements: measurementsData.length
+        };
+      } catch (error) {
+        console.error(`Error fetching data for station ${station.id}:`, error);
+
+        // Return basic station data even if table data fails
+        return {
+          id: station.id,
+          label: station.label,
+          label_id: station.label_id,
+          label_name: station.label_name,
+          label_type: station.label_type,
+          latitude: station.latitude,
+          longitude: station.longitude,
+          altitude: station.altitude,
+          ip: station.ip,
+          sms_number: station.sms_number,
+          avg_fetch_health_7d: 0,
+          avg_data_health_7d: 0,
+          avg_fetch_health_24h: 0,
+          avg_data_health_24h: 0,
+          hourly_status: [],
+          public_data: {},
+          status_data: {},
+          measurements_data: {},
+          last_updated: new Date().toISOString(),
+          total_measurements: 0
+        };
+      }
+    }
+
+    // Process stations in batches to limit concurrent RPC calls
+    for (let i = 0; i < stations.length; i += concurrencyLimit) {
+      const chunk = stations.slice(i, i + concurrencyLimit);
+      const chunkResults = await Promise.all(chunk.map(processStation));
+      advancedData.push(...chunkResults);
+      console.log(`Processed stations ${i + 1}-${Math.min(i + concurrencyLimit, stations.length)}`);
+    }
+
+  // Calculate all possible keys for dynamic columns
     const publicKeys = new Set<string>();
     const statusKeys = new Set<string>();
     const measurementKeys = new Set<string>();

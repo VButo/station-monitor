@@ -1,6 +1,11 @@
-import React from 'react';
+ 'use client'
+
+import React, { useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import type { Station, StationHourlyData } from '@/types/station';
 import TimelineCell from '@/components/TimelineCell';
+
+const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
 interface OverviewTabProps {
   station: Station;
@@ -28,6 +33,50 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
     stationData?.hour_bucket_local?.length === 24 
       ? stationData.hour_bucket_local 
       : undefined;
+
+  // Build ApexCharts series for health and online (use timestamps as x)
+  const healthSeries = useMemo(() => {
+    if (!Array.isArray(healthChartData) || !timestamps) return [];
+    return [
+      {
+        name: 'Health',
+        data: healthChartData.map((v, i) => ({ x: new Date(timestamps[i]).getTime(), y: typeof v === 'number' ? v : 0 }))
+      }
+    ];
+  }, [healthChartData, timestamps]);
+
+  const onlineSeries = useMemo(() => {
+    if (!timestamps) return [];
+    if (!Array.isArray(onlineChartData)) return [];
+
+    // Treat onlineChartData as numeric. If values are in 0..1, scale to 0..100.
+  const nums = onlineChartData.map(Number);
+    const max = Math.max(...nums.map(n => (Number.isFinite(n) ? n : 0)));
+    if (max <= 1) {
+      return [{ name: 'Online', data: nums.map((v, i) => ({ x: new Date(timestamps[i]).getTime(), y: (Number.isFinite(v) ? v * 100 : 0) })) }];
+    }
+    return [{ name: 'Online', data: nums.map((v, i) => ({ x: new Date(timestamps[i]).getTime(), y: (Number.isFinite(v) ? v : 0) })) }];
+  }, [onlineChartData, timestamps]);
+
+  // Shared simplified chart options similar to overview's Data Health style
+  const sharedChartOptions = useMemo(() => ({
+    chart: {
+      type: 'area' as const,
+      height: 220,
+      zoom: { enabled: false },
+      toolbar: { show: false },
+      animations: { enabled: true, easing: 'easeinout' as const, speed: 600 }
+    },
+    colors: ['#8B5CF6'],
+    fill: { type: 'solid', opacity: 0.15 },
+    stroke: { width: 2, curve: 'smooth' as const },
+    grid: { borderColor: '#e5e7eb', xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } } },
+    xaxis: { type: 'datetime' as const, labels: { format: 'HH:mm', style: { colors: '#6B7280', fontSize: '12px' } }, axisBorder: { show: false }, axisTicks: { show: false }, crosshairs: { show: false }, tooltip: { enabled: false } },
+    yaxis: { min: 0, max: 100, labels: { style: { colors: '#6B7280', fontSize: '12px' }, formatter: (v: number) => `${Math.round(v)}%` } },
+  tooltip: { theme: 'light' as const, shared: true, intersect: false, marker: { show: false }, x: { format: 'MMM dd, yyyy, HH:mm' }, style: { fontSize: '12px', fontFamily: 'inherit' } },
+    legend: { show: false },
+    dataLabels: { enabled: false }
+  }), []);
 
   const combinedFields = [
     { label: 'ID', value: station.id },
@@ -71,8 +120,12 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
             boxShadow: '0 0 8px rgba(0,0,0,0.05)',
           }}
         >
-          <TimelineCell value={onlineChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
-          <div style={{ textAlign: 'center', marginTop: '8px', color: '#555', fontSize: '12px' }}>
+          {Array.isArray(onlineSeries) && onlineSeries.length > 0 ? (
+            <Chart options={{ ...sharedChartOptions, colors: ['#10B981'] }} series={onlineSeries} type="area" height={220} />
+          ) : (
+            <TimelineCell value={onlineChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
+          )}
+          <div className="text-gray-500 text-center mt-2 text-sm">
             Station Online Status (Last 24 Hours)
           </div>
         </div>
@@ -90,8 +143,12 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
             boxShadow: '0 0 8px rgba(0,0,0,0.05)',
           }}
         >
-          <TimelineCell value={healthChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
-          <div style={{ textAlign: 'center', marginTop: '8px', color: '#555', fontSize: '12px' }}>
+          {Array.isArray(healthSeries) && healthSeries.length > 0 ? (
+            <Chart options={sharedChartOptions} series={healthSeries} type="area" height={220} />
+          ) : (
+            <TimelineCell value={healthChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
+          )}
+          <div className="text-gray-500 text-center mt-2 text-sm">
             Station Health (Last 24 Hours)
           </div>
         </div>
@@ -158,6 +215,10 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
             width: 100%;
             text-align: left;
           }
+        }
+        /* ApexCharts tooltip text color override to match Tailwind text-gray-500 (#6B7280) */
+        .apexcharts-tooltip, .apexcharts-tooltip * {
+          color: #6B7280 !important;
         }
       `}</style>
     </div>

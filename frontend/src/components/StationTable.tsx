@@ -30,41 +30,109 @@ interface StationTableProps {
   readonly onRowClick: (stationId: string) => void;
 }
 
-export default function StationTable({ rowData, onRowClick }: StationTableProps) {
-  const [rowCount, setRowCount] = useState(0);
-  const [filteredCount, setFilteredCount] = useState(0);
-  const [isFiltered, setIsFiltered] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [gridApi, setGridApi] = useState<GridApi | null>(null);
+function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(false);
 
-  // Mobile detection hook
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 1024); // lg breakpoint in Tailwind
     };
-    
+
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Reset function to clear search, filters, and sorts
-  const resetTable = () => {
-    setSearchTerm('');
-    if (gridApi) {
-      // Reset all column filters
-      gridApi.setFilterModel({});
-      // Reset all sorting
-      gridApi.applyColumnState({
-        defaultState: { sort: null }
-      });
-    }
+  return isMobile;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return value === null || value === undefined ? '' : `${value}%`;
+}
+
+function createColumnDefs(isMobile: boolean, onRowClick: (stationId: string) => void): ColDef<RowData>[] {
+  const idCol: ColDef<RowData> = {
+    headerName: 'ID',
+    field: 'label_id',
+    minWidth: isMobile ? 70 : 50,
+    width: isMobile ? 80 : undefined,
+    maxWidth: isMobile ? 90 : 70
   };
 
-  // Filter data based on search term
-  const filteredData = React.useMemo(() => {
+  const nameCellRenderer = (params: ICellRendererParams) => {
+    const id = params.data?.id;
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            onRowClick(String(id));
+          } catch (err) {
+            console.error('Error navigating to station:', err);
+          }
+        }}
+        className="text-lg underline text-gray-900 bg-transparent border-none p-0 cursor-pointer"
+      >
+        {params.value}
+      </button>
+    );
+  };
+
+  const nameCol: ColDef<RowData> = {
+    headerName: 'Name',
+    field: 'label_text',
+    cellStyle: { fontWeight: '600', fontSize: '16px' },
+    minWidth: isMobile ? 150 : 250,
+    width: isMobile ? 200 : undefined,
+    flex: isMobile ? undefined : 1,
+    cellRenderer: nameCellRenderer
+  };
+
+  const typeCol: ColDef<RowData> = {
+    headerName: 'Type',
+    field: 'label_type',
+    minWidth: isMobile ? 70 : 50,
+    width: isMobile ? 90 : undefined,
+    maxWidth: isMobile ? 100 : 80
+  };
+
+  const makePercentCol = (headerName: string, field: keyof RowData): ColDef<RowData> => ({
+    headerName,
+    field,
+    minWidth: isMobile ? 90 : 100,
+    width: isMobile ? 110 : undefined,
+    maxWidth: isMobile ? 130 : 180,
+    valueFormatter: params => formatPercent(params.value)
+  });
+
+  const timelineCol: ColDef<RowData> = {
+    headerName: 'Online graph (24h)',
+    field: 'status',
+    cellRenderer: TimelineCell,
+    cellRendererParams: (params: ICellRendererParams) => ({
+      timestamps: params.data.timestamps,
+    }),
+    sortable: false,
+    filter: false,
+    minWidth: isMobile ? 200 : 180,
+    width: isMobile ? 250 : undefined,
+    flex: isMobile ? undefined : 2
+  };
+
+  return [
+    idCol,
+    nameCol,
+    typeCol,
+    makePercentCol('Health (24h)', 'avg_data_health_24h'),
+    makePercentCol('Online (24h)', 'avg_fetch_health_24h'),
+    timelineCol
+  ];
+}
+
+function useFilteredData(rowData: RowData[], searchTerm: string) {
+  return React.useMemo(() => {
     if (!searchTerm.trim()) {
       return rowData;
     }
@@ -84,6 +152,19 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
       );
     });
   }, [rowData, searchTerm]);
+}
+
+export default function StationTable({ rowData, onRowClick }: StationTableProps) {
+  const isMobile = useIsMobile();
+
+  const [rowCount, setRowCount] = useState(0);
+  const [filteredCount, setFilteredCount] = useState(0);
+  const [isFiltered, setIsFiltered] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [gridApi, setGridApi] = useState<GridApi | null>(null);
+
+  const filteredData = useFilteredData(rowData, searchTerm);
+  const columnDefs = React.useMemo(() => createColumnDefs(isMobile, onRowClick), [isMobile, onRowClick]);
 
   // Update counts when filteredData changes
   useEffect(() => {
@@ -99,90 +180,24 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
   };
 
   const onModelUpdated = (event: ModelUpdatedEvent) => {
-    const api = event.api;
-    setRowCount(api.getDisplayedRowCount());
+    setRowCount(event.api.getDisplayedRowCount());
   };
 
   const onFilterChanged = (event: FilterChangedEvent) => {
-    const api = event.api;
-    setFilteredCount(api.getDisplayedRowCount());
-    setIsFiltered(api.isAnyFilterPresent());
+    setFilteredCount(event.api.getDisplayedRowCount());
+    setIsFiltered(event.api.isAnyFilterPresent());
   };
 
-  const columnDefs: ColDef<RowData>[] = [
-    { 
-      headerName: 'ID', 
-      field: 'label_id', 
-      minWidth: isMobile ? 70 : 50, 
-      width: isMobile ? 80 : undefined,
-      maxWidth: isMobile ? 90 : 70 
-    },
-    { 
-      headerName: 'Name', 
-      field: 'label_text', 
-      cellStyle: { fontWeight: '600', fontSize: '16px' }, 
-      minWidth: isMobile ? 150 : 250, 
-      width: isMobile ? 200 : undefined,
-      flex: isMobile ? undefined : 1,
-      // Only the Name is clickable; rows are not clickable
-      cellRenderer: (params: ICellRendererParams) => {
-        const id = params.data?.id;
-        return (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              try {
-                onRowClick(String(id));
-              } catch (err) {
-                console.error('Error navigating to station:', err);
-              }
-            }}
-            className="text-lg underline text-gray-900 bg-transparent border-none p-0 cursor-pointer"
-          >
-            {params.value}
-          </button>
-        );
-      }
-    },
-    { 
-      headerName: 'Type', 
-      field: 'label_type', 
-      minWidth: isMobile ? 70 : 50, 
-      width: isMobile ? 90 : undefined,
-      maxWidth: isMobile ? 100 : 80 
-    },
-    { 
-      headerName: 'Health (24h)', 
-      field: 'avg_data_health_24h', 
-      minWidth: isMobile ? 90 : 100, 
-      width: isMobile ? 110 : undefined,
-      maxWidth: isMobile ? 130 : 180, 
-      valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%` 
-    },
-    { 
-      headerName: 'Online (24h)', 
-      field: 'avg_fetch_health_24h', 
-      minWidth: isMobile ? 90 : 100, 
-      width: isMobile ? 110 : undefined,
-      maxWidth: isMobile ? 130 : 180, 
-      valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`
-    },
-    {
-      headerName: 'Online graph (24h)',
-      field: 'status',
-      cellRenderer: TimelineCell,
-      cellRendererParams: (params: ICellRendererParams) => ({
-        timestamps: params.data.timestamps,
-      }),
-      sortable: false,
-      filter: false,
-      minWidth: isMobile ? 200 : 180,
-      width: isMobile ? 250 : undefined,
-      flex: isMobile ? undefined : 2
+  // Reset function to clear search, filters, and sorts
+  const resetTable = () => {
+    setSearchTerm('');
+    if (gridApi) {
+      gridApi.setFilterModel({});
+      gridApi.applyColumnState({
+        defaultState: { sort: null }
+      });
     }
-  ];
+  };
 
   return (
     <div className="flex flex-col w-full" style={{ height: '100%' }}>
@@ -246,6 +261,8 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
               columnDefs={columnDefs}
               pagination={false}
               paginationPageSize={50}
+              // Disable column dragging/reordering
+              suppressMovableColumns={true}
               defaultColDef={{ 
                 sortable: true, 
                 filter: true, 

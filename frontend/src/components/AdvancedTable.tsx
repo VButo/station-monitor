@@ -85,7 +85,8 @@ export default function AdvancedTable({
     loadState,
     saveGridState,
     restoreGridState,
-    saveComponentState
+    saveComponentState,
+    clearState
   } = useAdvancedTablePersistence();
 
   // Fetch station data
@@ -566,17 +567,47 @@ export default function AdvancedTable({
     };
   }, [showColumnSelector]);
 
-  // Generate column definitions
-  const columnDefs = useMemo((): ColDef[] => {
-    if (stationData.length === 0 || !columnStructure.public_data || Object.keys(columnStructure.public_data).length === 0) return [];
+  // Helper function to check if a value is numeric across stations
+  const isColumnNumeric = useCallback((dataKey: string, nestedKey?: string): boolean => {
+    for (const station of stationData) {
+      const sampleValue = nestedKey 
+        ? (station as unknown as Record<string, Record<string, unknown>>)[dataKey]?.[nestedKey]
+        : (station as unknown as Record<string, unknown>)[dataKey];
+      
+      if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
+        const numValue = Number(sampleValue);
+        if (!Number.isNaN(numValue)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [stationData]);
 
-    const columns: ColDef[] = [];
+  // Helper function to create numeric comparator
+  const createNumericComparator = useCallback(() => {
+    return (valueA: unknown, valueB: unknown) => {
+      const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || Number.isNaN(Number(valueA))) ? -Infinity : Number(valueA);
+      const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || Number.isNaN(Number(valueB))) ? -Infinity : Number(valueB);
+      return numA - numB;
+    };
+  }, []);
 
-    // Always include basic columns (pinned on desktop, not pinned on mobile)
+  // Helper function to create date filter params
+  const createDateFilterParams = useCallback(() => ({
+    buttons: ['reset', 'apply'] as const,
+    comparator: (filterDate: Date, cellValue: string) => {
+      const cellDate = new Date(cellValue);
+      return cellDate.getTime() - filterDate.getTime();
+    }
+  }), []);
+
+  // Helper function to add basic pinned columns
+  const addBasicColumns = useCallback((columns: ColDef[], isPinned: boolean) => {
     columns.push({
       headerName: 'ID',
       field: 'label_id',
-      pinned: isMobile ? undefined : 'left',
+      pinned: isPinned ? 'left' : undefined,
       minWidth: 80,
       maxWidth: 100,
       cellStyle: { fontWeight: '600' },
@@ -587,7 +618,7 @@ export default function AdvancedTable({
     columns.push({
       headerName: 'Name',
       field: 'label_name',
-      pinned: isMobile ? undefined : 'left',
+      pinned: isPinned ? 'left' : undefined,
       minWidth: 200,
       flex: 1,
       cellStyle: { fontWeight: '600', fontSize: '16px' },
@@ -614,15 +645,17 @@ export default function AdvancedTable({
     columns.push({
       headerName: 'Type',
       field: 'label_type',
-      pinned: isMobile ? undefined : 'left',
+      pinned: isPinned ? 'left' : undefined,
       minWidth: 100,
       maxWidth: 120,
       filter: 'agTextColumnFilter',
       filterParams: { buttons: ['reset', 'apply'] }
     });
+  }, [handleRowClick]);
 
-    // Add configurable columns based on selection
-    if (selectedColumns.has('label')) {
+  // Helper function to add station info columns
+  const addStationInfoColumns = useCallback((columns: ColDef[], selected: Set<string>) => {
+    if (selected.has('label')) {
       columns.push({
         headerName: 'Label',
         field: 'label',
@@ -632,7 +665,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('latitude')) {
+    if (selected.has('latitude')) {
       columns.push({
         headerName: 'Latitude',
         field: 'latitude',
@@ -643,7 +676,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('longitude')) {
+    if (selected.has('longitude')) {
       columns.push({
         headerName: 'Longitude',
         field: 'longitude',
@@ -654,7 +687,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('altitude')) {
+    if (selected.has('altitude')) {
       columns.push({
         headerName: 'Altitude',
         field: 'altitude',
@@ -665,7 +698,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('ip_address')) {
+    if (selected.has('ip_address')) {
       columns.push({
         headerName: 'IP Address',
         field: 'ip',
@@ -675,7 +708,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('sms_number')) {
+    if (selected.has('sms_number')) {
       columns.push({
         headerName: 'SMS Number',
         field: 'sms_number',
@@ -684,9 +717,11 @@ export default function AdvancedTable({
         filterParams: { buttons: ['reset', 'apply'] }
       });
     }
+  }, []);
 
-    // Health/status columns
-    if (selectedColumns.has('online_24h_avg')) {
+  // Helper function to add health/status columns
+  const addHealthColumns = useCallback((columns: ColDef[], selected: Set<string>) => {
+    if (selected.has('online_24h_avg')) {
       columns.push({
         headerName: 'Online_24h_Avg',
         field: 'avg_fetch_health_24h',
@@ -698,7 +733,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('online_7d_avg')) {
+    if (selected.has('online_7d_avg')) {
       columns.push({
         headerName: 'Online_7d_Avg',
         field: 'avg_fetch_health_7d',
@@ -710,7 +745,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('online_24h_graph')) {
+    if (selected.has('online_24h_graph')) {
       columns.push({
         headerName: 'Online_24h_Graph',
         field: 'hourly_status',
@@ -724,7 +759,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('online_last_seen')) {
+    if (selected.has('online_last_seen')) {
       columns.push({
         headerName: 'Online_Last_Seen',
         field: 'last_updated',
@@ -735,17 +770,11 @@ export default function AdvancedTable({
           return date.toLocaleString();
         },
         filter: 'agDateColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
-          comparator: (filterDate: Date, cellValue: string) => {
-            const cellDate = new Date(cellValue);
-            return cellDate.getTime() - filterDate.getTime();
-          }
-        }
+        filterParams: createDateFilterParams()
       });
     }
 
-    if (selectedColumns.has('data_health_24h_avg')) {
+    if (selected.has('data_health_24h_avg')) {
       columns.push({
         headerName: 'Data_Health_24h_Avg',
         field: 'avg_data_health_24h',
@@ -757,7 +786,7 @@ export default function AdvancedTable({
       });
     }
 
-    if (selectedColumns.has('data_health_7d_avg')) {
+    if (selected.has('data_health_7d_avg')) {
       columns.push({
         headerName: 'Data_Health_7d_Avg',
         field: 'avg_data_health_7d',
@@ -768,128 +797,30 @@ export default function AdvancedTable({
         filterParams: { buttons: ['reset', 'apply'] }
       });
     }
+  }, [createDateFilterParams]);
 
-    // Public timestamp column
-    if (selectedColumns.has('public_timestamp')) {
+  // Helper function to add dynamic data columns
+  const addDynamicDataColumns = useCallback((
+    columns: ColDef[], 
+    selected: Set<string>,
+    dataKeys: Record<string, string>,
+    prefix: string,
+    dataField: string
+  ) => {
+    // The API exposes timestamps at root level as `public_timestamp`,
+    // `status_timestamp`, and `measurements_timestamp`. `dataField` is
+    // one of 'public_data' | 'status_data' | 'measurements_data', so
+    // map it to the correct root-level timestamp key here.
+    let timestampKey = '';
+    if (dataField === 'public_data') timestampKey = 'public_timestamp';
+    else if (dataField === 'status_data') timestampKey = 'status_timestamp';
+    else if (dataField === 'measurements_data') timestampKey = 'measurements_timestamp';
+
+    if (timestampKey && selected.has(timestampKey)) {
       columns.push({
-        headerName: 'Public: Timestamp',
-        field: 'public_timestamp',
+        headerName: `${prefix}: Timestamp`,
+        field: timestampKey,
         minWidth: 160,
-        valueFormatter: params => {
-          if (!params.value) return '';
-          const date = new Date(params.value);
-          return date.toLocaleString();
-        },
-        filter: 'agDateColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
-          comparator: (filterDate: Date, cellValue: string) => {
-            const cellDate = new Date(cellValue);
-            return cellDate.getTime() - filterDate.getTime();
-          }
-        }
-      });
-    }
-
-    // Dynamic public data columns
-    for (const key of Object.keys(columnStructure.public_data)) {
-      const colId = `public_data.${key}`;
-      if (selectedColumns.has(colId)) {
-        // Check if the value is numeric by sampling multiple stations (some might not have data)
-        let isNumeric = false;
-        for (const station of stationData) {
-          const sampleValue = station?.public_data?.[key];
-          if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
-            const numValue = Number(sampleValue);
-            if (!Number.isNaN(numValue)) {
-              isNumeric = true;
-              break; // Found a valid numeric sample, use it to determine filter type
-            }
-          }
-        }
-        
-        columns.push({
-          headerName: `Public: ${key}`,
-          field: colId,
-          minWidth: 120,
-          valueGetter: params => params.data?.public_data?.[key] || '',
-          comparator: isNumeric ? (valueA, valueB) => {
-            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || Number.isNaN(Number(valueA))) ? -Infinity : Number(valueA);
-            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || Number.isNaN(Number(valueB))) ? -Infinity : Number(valueB);
-            return numA - numB;
-          } : undefined,
-          filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
-          filterParams: {
-            buttons: ['reset', 'apply'],
-          }
-        });
-      }
-    }
-
-    // Status timestamp column
-    if (selectedColumns.has('status_timestamp')) {
-      columns.push({
-        headerName: 'Status: Timestamp',
-        field: 'status_timestamp',
-        minWidth: 160,
-        valueFormatter: params => {
-          if (!params.value) return '';
-          const date = new Date(params.value);
-          return date.toLocaleString();
-        },
-        filter: 'agDateColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
-          comparator: (filterDate: Date, cellValue: string) => {
-            const cellDate = new Date(cellValue);
-            return cellDate.getTime() - filterDate.getTime();
-          }
-        }
-      });
-    }
-
-    // Dynamic status data columns
-    for (const key of Object.keys(columnStructure.status_data)) {
-      const colId = `status_data.${key}`;
-      if (selectedColumns.has(colId)) {
-        // Check if the value is numeric by sampling multiple stations (some might not have data)
-        let isNumeric = false;
-        for (const station of stationData) {
-          const sampleValue = station?.status_data?.[key];
-          if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
-            const numValue = Number(sampleValue);
-            if (!Number.isNaN(numValue)) {
-              isNumeric = true;
-              break; // Found a valid numeric sample, use it to determine filter type
-            }
-          }
-        }
-        
-        columns.push({
-          headerName: `Status: ${key}`,
-          field: colId,
-          minWidth: 120,
-          valueGetter: params => params.data?.status_data?.[key] || '',
-          comparator: isNumeric ? (valueA, valueB) => {
-            // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
-            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || Number.isNaN(Number(valueA))) ? -Infinity : Number(valueA);
-            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || Number.isNaN(Number(valueB))) ? -Infinity : Number(valueB);
-            return numA - numB;
-          } : undefined,
-          filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
-          filterParams: {
-            buttons: ['reset', 'apply'],
-          }
-        });
-      }
-    }
-
-    // Measurements timestamp
-    if (selectedColumns.has('measurements_timestamp')) {
-      columns.push({
-        headerName: 'Measurements: Timestamp',
-        field: 'measurements_timestamp',
-        minWidth: 180,
         valueFormatter: params => {
           if (!params.value) return '';
           try {
@@ -899,54 +830,55 @@ export default function AdvancedTable({
           }
         },
         filter: 'agDateColumnFilter',
-        filterParams: {
-          buttons: ['reset', 'apply'],
-          comparator: (filterDate: Date, cellValue: string) => {
-            const cellDate = new Date(cellValue);
-            return cellDate.getTime() - filterDate.getTime();
-          }
-        }
+        filterParams: createDateFilterParams()
       });
     }
 
-    // Dynamic measurements data columns
-    for (const key of Object.keys(columnStructure.measurements_data)) {
-      const colId = `measurements_data.${key}`;
-      if (selectedColumns.has(colId)) {
-        // Check if the value is numeric by sampling multiple stations (some might not have data)
-        let isNumeric = false;
-        for (const station of stationData) {
-          const sampleValue = station?.measurements_data?.[key];
-          if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
-            const numValue = Number(sampleValue);
-            if (!Number.isNaN(numValue)) {
-              isNumeric = true;
-              break; // Found a valid numeric sample, use it to determine filter type
-            }
-          }
-        }
+    for (const key of Object.keys(dataKeys)) {
+      const colId = `${dataField}.${key}`;
+      if (selected.has(colId)) {
+        const isNumeric = isColumnNumeric(dataField, key);
         
         columns.push({
-          headerName: `Measurements: ${key}`,
+          headerName: `${prefix}: ${key}`,
           field: colId,
           minWidth: 120,
-          valueGetter: params => params.data?.measurements_data?.[key] || '',
-          comparator: isNumeric ? (valueA, valueB) => {
-            // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
-            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || Number.isNaN(Number(valueA))) ? -Infinity : Number(valueA);
-            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || Number.isNaN(Number(valueB))) ? -Infinity : Number(valueB);
-            return numA - numB;
-          } : undefined,
+          valueGetter: params => (params.data as Record<string, Record<string, unknown>>)?.[dataField]?.[key] || '',
+          comparator: isNumeric ? createNumericComparator() : undefined,
           filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
-          filterParams: {
-            buttons: ['reset', 'apply'],
-          }
+          filterParams: { buttons: ['reset', 'apply'] }
         });
       }
     }
+  }, [isColumnNumeric, createNumericComparator, createDateFilterParams]);
+
+  // Generate column definitions
+  const columnDefs = useMemo((): ColDef[] => {
+    // Only return early if there's no station data or none of the dynamic groups have any keys
+    const hasPublic = columnStructure.public_data && Object.keys(columnStructure.public_data).length > 0;
+    const hasStatus = columnStructure.status_data && Object.keys(columnStructure.status_data).length > 0;
+    const hasMeasurements = columnStructure.measurements_data && Object.keys(columnStructure.measurements_data).length > 0;
+    const hasAnyStructure = hasPublic || hasStatus || hasMeasurements;
+    if (stationData.length === 0 || !hasAnyStructure) return [];
+
+    const columns: ColDef[] = [];
+
+    // Add basic pinned columns
+    addBasicColumns(columns, !isMobile);
+
+    // Add station info columns
+    addStationInfoColumns(columns, selectedColumns);
+
+    // Add health/status columns
+    addHealthColumns(columns, selectedColumns);
+
+    // Add dynamic data columns
+    addDynamicDataColumns(columns, selectedColumns, columnStructure.public_data, 'Public', 'public_data');
+    addDynamicDataColumns(columns, selectedColumns, columnStructure.status_data, 'Status', 'status_data');
+    addDynamicDataColumns(columns, selectedColumns, columnStructure.measurements_data, 'Measurements', 'measurements_data');
 
     return columns;
-  }, [selectedColumns, columnStructure, stationData, isMobile, handleRowClick]);
+  }, [selectedColumns, columnStructure, stationData, isMobile, addBasicColumns, addStationInfoColumns, addHealthColumns, addDynamicDataColumns]);
 
   // Update column pinning when mobile state changes
   useEffect(() => {
@@ -1064,7 +996,7 @@ export default function AdvancedTable({
                         </div>
                       </button>
                       {expandedGroup === 'station' && (
-                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-2 pb-2 space-y-1">
                           {[
                             { id: 'label', label: 'Label' },
                             { id: 'latitude', label: 'Latitude' },
@@ -1124,7 +1056,7 @@ export default function AdvancedTable({
                           </div>
                         </button>
                         {expandedGroup === 'public-data' && (
-                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          <div className="px-2 pb-2 space-y-1">
                             <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
                               <input
                                 type="checkbox"
@@ -1187,7 +1119,7 @@ export default function AdvancedTable({
                           </div>
                         </button>
                         {expandedGroup === 'status-data' && (
-                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          <div className="px-2 pb-2 space-y-1">
                             <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
                               <input
                                 type="checkbox"
@@ -1249,7 +1181,7 @@ export default function AdvancedTable({
                         </div>
                       </button>
                       {expandedGroup === 'measurements' && (
-                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-2 pb-2 space-y-1">
                           <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
                             <input
                               type="checkbox"
@@ -1312,6 +1244,20 @@ export default function AdvancedTable({
                     className="text-sm text-gray-500 hover:text-gray-700 underline whitespace-nowrap"
                   >
                     Reset
+                  </button>
+                  <button
+                    onClick={() => {
+                      try {
+                        clearState();
+                      } catch (err) {
+                        console.error('Error clearing persisted state', err);
+                      }
+                      // Reload to ensure grid and selectedColumns are re-initialized
+                      setTimeout(() => globalThis.location.reload(), 50);
+                    }}
+                    className="text-sm text-red-500 hover:text-red-700 underline whitespace-nowrap ml-3"
+                  >
+                    Clear saved layout
                   </button>
 
                   <div className="text-sm text-gray-600 whitespace-nowrap">
@@ -1417,7 +1363,7 @@ export default function AdvancedTable({
                         </div>
                       </button>
                       {expandedGroup === 'station' && (
-                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-2 pb-2 space-y-1">
                           {[
                             { id: 'label', label: 'Label' },
                             { id: 'latitude', label: 'Latitude' },
@@ -1477,7 +1423,7 @@ export default function AdvancedTable({
                           </div>
                         </button>
                         {expandedGroup === 'public-data' && (
-                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          <div className="px-2 pb-2 space-y-1">
                             <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
                               <input
                                 type="checkbox"
@@ -1540,7 +1486,7 @@ export default function AdvancedTable({
                           </div>
                         </button>
                         {expandedGroup === 'status-data' && (
-                          <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                          <div className="px-2 pb-2 space-y-1">
                             <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
                               <input
                                 type="checkbox"
@@ -1602,7 +1548,7 @@ export default function AdvancedTable({
                         </div>
                       </button>
                       {expandedGroup === 'measurements' && (
-                        <div className="px-2 pb-2 space-y-1" onClick={(e) => e.stopPropagation()}>
+                        <div className="px-2 pb-2 space-y-1">
                           <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
                             <input
                               type="checkbox"
@@ -1772,8 +1718,8 @@ export default function AdvancedTable({
                 </div>
               </button>
               {expandedGroup === 'station' && (
-                <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
-                  {/* Note: ID, Name, and Type are pinned left on desktop but not pinned on mobile */}
+              <div className="px-4 pb-4 space-y-2">
+                {/* Note: ID, Name, and Type are pinned left on desktop but not pinned on mobile */}
                   {[
                     { id: 'label', label: 'Label' },
                     { id: 'latitude', label: 'Latitude' },
@@ -1834,7 +1780,7 @@ export default function AdvancedTable({
                   </div>
                 </button>
                 {expandedGroup === 'public-data' && (
-                  <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-4 pb-4 space-y-2">
                     {/* Timestamp column first */}
                     <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
                       <input
@@ -1900,7 +1846,7 @@ export default function AdvancedTable({
                   </div>
                 </button>
                 {expandedGroup === 'status-data' && (
-                  <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-4 pb-4 space-y-2">
                     {/* Timestamp column first */}
                     <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
                       <input
@@ -1965,7 +1911,7 @@ export default function AdvancedTable({
                 </div>
               </button>
               {expandedGroup === 'measurements' && (
-                <div className="px-4 pb-4 space-y-2" onClick={(e) => e.stopPropagation()}>
+                <div className="px-4 pb-4 space-y-2">
                   {/* Timestamp column first */}
                   <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
                     <input
@@ -2015,20 +1961,19 @@ export default function AdvancedTable({
           <AgGridReact
             columnDefs={columnDefs}
             rowData={filteredData}
+            suppressMovableColumns={true}
             onGridReady={onGridReady}
             onFilterChanged={onFilterChanged}
             onModelUpdated={onModelUpdated}
             animateRows={false}
             // Rows are not clickable; only Name column is clickable via cellRenderer
             suppressMenuHide={true}
-            rowSelection="multiple"
             defaultColDef={{
               filter: true,
               sortable: true,
               resizable: true,
               floatingFilter: true,
             }}
-            suppressRowClickSelection={true}
             enableBrowserTooltips={true}
           />
         </div>

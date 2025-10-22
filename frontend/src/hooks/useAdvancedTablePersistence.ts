@@ -88,43 +88,49 @@ export function useAdvancedTablePersistence() {
     
     try {
       const state = loadState();
-      
-      if (state.gridState) {
-        // Restore column state (order, width, visibility)
-        if (state.gridState.columnState) {
-          let columnState = state.gridState.columnState;
-          
-          // If we're on mobile, remove pinning from basic columns to ensure responsive behavior
-          if (isMobile) {
-            columnState = columnState.map(col => {
-              if (col.colId === 'label_id' || col.colId === 'label_name' || col.colId === 'label_type') {
-                return { ...col, pinned: null };
-              }
-              return col;
-            });
-          }
-          
-          gridApi.applyColumnState({
-            state: columnState,
-            applyOrder: true,
+      if (!state.gridState) return;
+
+      // Restore column state (order, width, visibility)
+      const restoreColumns = (colState?: ColumnState[]) => {
+        if (!colState) return;
+        let columnState = colState;
+
+        // If we're on mobile, remove pinning from basic columns to ensure responsive behavior
+        if (isMobile) {
+          columnState = columnState.map(col => {
+            if (col.colId === 'label_id' || col.colId === 'label_name' || col.colId === 'label_type') {
+              return { ...col, pinned: null };
+            }
+            return col;
           });
         }
-        
-        // Restore filter model
-        if (state.gridState.filterModel) {
-          gridApi.setFilterModel(state.gridState.filterModel);
+
+        gridApi.applyColumnState({
+          state: columnState,
+          applyOrder: true,
+        });
+      };
+
+      // Restore filter model
+      const restoreFilters = (filterModel?: FilterModel) => {
+        if (!filterModel) return;
+        gridApi.setFilterModel(filterModel);
+      };
+
+      // Restore sort model (if available)
+      const restoreSort = (sortModel?: unknown[]) => {
+        if (!sortModel || sortModel.length === 0) return;
+        try {
+          const gridWithSort = gridApi as unknown as { setSortModel?: (model: unknown[]) => void };
+          gridWithSort.setSortModel?.(sortModel);
+        } catch {
+          // Sort model restoration not available
         }
-        
-        // Restore sort model (if available)
-        if (state.gridState.sortModel && state.gridState.sortModel.length > 0) {
-          try {
-            const gridWithSort = gridApi as unknown as { setSortModel?: (model: unknown[]) => void };
-            gridWithSort.setSortModel?.(state.gridState.sortModel);
-          } catch {
-            // Sort model restoration not available
-          }
-        }
-      }
+      };
+
+      restoreColumns(state.gridState.columnState);
+      restoreFilters(state.gridState.filterModel);
+      restoreSort(state.gridState.sortModel);
     } catch (error) {
       console.error('Error restoring grid state:', error);
     }

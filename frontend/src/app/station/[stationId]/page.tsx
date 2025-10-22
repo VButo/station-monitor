@@ -9,6 +9,7 @@ import MeasurementsTab from './components/MeasurementsTab';
 import ModemTab from './components/ModemTab';
 import PublicLiveTab from './components/PublicLiveTab';
 import { useRouter, useSearchParams } from 'next/navigation';
+import StationSelector from '@/components/StationSelector';
 
 interface StationPageProps {
   readonly params: Promise<{ stationId: string }>;
@@ -130,21 +131,8 @@ export default function StationPage(props: StationPageProps) {
           {/* Station Selector and Tabs Container */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-6">
             <div className="p-6">
-              <label htmlFor="station-selector" className="block text-sm text-gray-500 mb-2">
-                Search stations
-              </label>
-              <select
-                id="station-selector"
-                value={station.id}
-                onChange={(e) => handleStationSelect(Number(e.target.value))}
-                className="w-1/3 min-w-[200px] h-10 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-500"
-              >
-                {stationsList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-sm text-gray-500 mb-2">Station</label>
+              <StationSelector stations={stationsList} value={station.id} onSelect={handleStationSelect} />
 
               {/* Tab Navigation */}
               <div className="flex items-center gap-2 mt-4">
