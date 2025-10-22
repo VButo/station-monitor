@@ -131,7 +131,7 @@ export default function StationPage(props: StationPageProps) {
           {/* Station Selector and Tabs Container */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-6">
             <div className="p-6">
-              <label className="block text-sm text-gray-500 mb-2">Station</label>
+              <label htmlFor="station-selector" className="block text-sm text-gray-500 mb-2">Station</label>
               <StationSelector stations={stationsList} value={station.id} onSelect={handleStationSelect} />
 
               {/* Tab Navigation */}

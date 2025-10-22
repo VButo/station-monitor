@@ -2,8 +2,8 @@
 import { useState, useRef, useEffect } from 'react'
 
 interface SearchDropdownProps {
-  onSearch: (query: string) => void
-  placeholder?: string
+  readonly onSearch: (query: string) => void
+  readonly placeholder?: string
 }
 
 export default function SearchDropdown({ onSearch, placeholder = "Start Typing..." }: SearchDropdownProps) {
