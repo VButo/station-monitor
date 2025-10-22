@@ -8,7 +8,7 @@ import StatusTab from './components/StatusTab';
 import MeasurementsTab from './components/MeasurementsTab';
 import ModemTab from './components/ModemTab';
 import PublicLiveTab from './components/PublicLiveTab';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface StationPageProps {
   readonly params: Promise<{ stationId: string }>;
@@ -30,6 +30,7 @@ export default function StationPage(props: StationPageProps) {
   // Additional state for dropdown
   const [stationsList, setStationsList] = useState<Station[]>([]);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Fetch stations list on mount
   useEffect(() => {
@@ -61,7 +62,8 @@ export default function StationPage(props: StationPageProps) {
 
   const handleStationSelect = (id: number) => {
     setSelectedTab('overview'); // optional reset
-    router.push(`/station/${id}`);
+    const tab = searchParams?.get('tab') || 'list'
+    router.push(`/station/${id}?tab=${encodeURIComponent(tab)}`);
   };
 
   if (loading) {
@@ -69,7 +71,7 @@ export default function StationPage(props: StationPageProps) {
       <div style={{ minHeight: '100vh', background: '#fafbfc', maxWidth: '100%', display: 'flex', justifyContent: 'center', paddingTop: 32, paddingBottom: 32 }}>
         <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #0001', padding: '32px 36px', minWidth: '50%', maxWidth: '100%' }}>
           <div style={{ height: 24, width: 200, backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 28, animation: 'pulse 1.5s infinite' }} />
-          {[...Array(15)].map((_, i) => (
+          {Array.from({ length: 15 }).map((_, i) => (
             
             <div key={`skeleton-${i}`} style={{ height: 20, width: '100%', backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
           ))}

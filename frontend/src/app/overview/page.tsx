@@ -160,11 +160,11 @@ const processOnlineData = (data: OnlineData24h[] | OnlineData7d[]): ChartDataPoi
   // Aggregate all station states by hour using the new data structure
   const hourlyData = new Map<string, { online: number; offline: number }>();
   
-  data.forEach(station => {
+  for (const station of data) {
     // Each station has hourly_online_array and hour_bucket_local arrays
-    station.hourly_online_array.forEach((isOnline, index) => {
+    for (const [index, isOnline] of station.hourly_online_array.entries()) {
       const hourBucket = station.hour_bucket_local[index];
-      if (!hourBucket) return; // Skip if no corresponding hour bucket
+      if (!hourBucket) continue; // Skip if no corresponding hour bucket
       
       if (!hourlyData.has(hourBucket)) {
         hourlyData.set(hourBucket, { online: 0, offline: 0 });
@@ -175,8 +175,8 @@ const processOnlineData = (data: OnlineData24h[] | OnlineData7d[]): ChartDataPoi
       } else {
         hourlyData.get(hourBucket)!.offline++;
       }
-    });
-  });
+    }
+  }
 
   // Convert to chart format
   const result = [];
@@ -196,11 +196,11 @@ const processHealthData = (data: OnlineData24h[] | OnlineData7d[]): HealthChartD
   // Aggregate health data by hour using the new data structure
   const hourlyHealthData = new Map<string, { healthValues: number[] }>();
   
-  data.forEach(station => {
+  for (const station of data) {
     // Each station has hourly_health_array and hour_bucket_local arrays
-    station.hourly_health_array.forEach((healthValue, index) => {
+    for (const [index, healthValue] of station.hourly_health_array.entries()) {
       const hourBucket = station.hour_bucket_local[index];
-      if (!hourBucket) return; // Skip if no corresponding hour bucket
+      if (!hourBucket) continue; // Skip if no corresponding hour bucket
       
       if (!hourlyHealthData.has(hourBucket)) {
         hourlyHealthData.set(hourBucket, { healthValues: [] });
@@ -214,8 +214,8 @@ const processHealthData = (data: OnlineData24h[] | OnlineData7d[]): HealthChartD
         // Only add 0 for average calculation, we'll handle this separately
         bucket.healthValues.push(0);
       }
-    });
-  });
+    }
+  }
 
   // Convert to chart format with average, min, and max health
   const result = [];
@@ -660,11 +660,12 @@ function OverviewPageContent() {
       data-prefix="fas"
       data-icon="globe"
       className={"w-8 h-8 text-green-400"}
-      role="img"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 640 640"
       fill="currentColor"
+      aria-label="Online Icon"
     >
+      <title>Online Icon</title>
       <g transform="translate(64, 64)">
         <path d="M352 256c0 22.2-1.2 43.6-3.3 64H163.3c-2.2-20.4-3.3-41.8-3.3-64s1.2-43.6 3.3-64H348.7c2.2 20.4 3.3 41.8 3.3 64zm28.8-64H503.9c5.3 20.5 8.1 41.9 8.1 64s-2.8 43.5-8.1 64H380.8c2.1-20.6 3.2-42 3.2-64s-1.1-43.4-3.2-64zm112.6-32H376.7c-10-63.9-29.8-117.4-55.3-151.6c78.3 20.7 142 77.5 171.9 151.6zm-149.1 0H167.7c6.1-36.4 15.5-68.6 27-94.7c10.5-23.6 22.2-40.7 33.5-51.5C239.4 3.2 248.7 0 256 0s16.6 3.2 27.8 13.8c11.3 10.8 23 27.9 33.5 51.5c11.6 26 20.9 58.2 27 94.7zm-209 0H18.6C48.6 85.9 112.2 29.1 190.6 8.4C165.1 42.6 145.3 96.1 135.3 160zM8.1 192H131.2c-2.1 20.6-3.2 42-3.2 64s1.1 43.4 3.2 64H8.1C2.8 299.5 0 278.1 0 256s2.8-43.5 8.1-64zM194.7 446.6c-11.6-26-20.9-58.2-27-94.6H344.3c-6.1 36.4-15.5 68.6-27 94.6c-10.5 23.6-22.2 40.7-33.5 51.5C272.6 508.8 263.3 512 256 512s-16.6-3.2-27.8-13.8c-11.3-10.8-23-27.9-33.5-51.5zM135.3 352c10 63.9 29.8 117.4 55.3 151.6C112.2 482.9 48.6 426.1 18.6 352H135.3zm358.1 0c-30 74.1-93.6 130.9-171.9 151.6c25.5-34.2 45.2-87.7 55.3-151.6H493.4z"/>
       </g>
@@ -678,11 +679,11 @@ function OverviewPageContent() {
       data-prefix="fas"
       data-icon="power-off"
       className="w-8 h-8 text-red-400"
-      role="img"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 640 640"
       fill="currentColor"
     >
+      <title>Offline Icon</title>
       <g transform="translate(64, 64)">
         <path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32V256c0 17.7 14.3 32 32 32s32-14.3 32-32V32zM143.5 120.6c13.6-11.3 15.4-31.5 4.1-45.1s-31.5-15.4-45.1-4.1C49.7 115.4 16 181.8 16 256c0 132.5 107.5 240 240 240s240-107.5 240-240c0-74.2-33.8-140.6-86.6-184.6c-13.6-11.3-33.8-9.4-45.1 4.1s-9.4 33.8 4.1 45.1c38.9 32.3 63.5 81 63.5 135.4c0 97.2-78.8 176-176 176s-176-78.8-176-176c0-54.4 24.7-103.1 63.5-135.4z" />
       </g>
@@ -696,11 +697,12 @@ function OverviewPageContent() {
       data-prefix="fas"
       data-icon="server"
       className={"w-8 h-8 text-blue-400"}
-      role="img"
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 640 640"
       fill="currentColor"
+      aria-label="Server Icon"
     >
+      <title>Server Icon</title>
       <g transform="translate(64, 64)">
         <path d="M64 32C28.7 32 0 60.7 0 96v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V96c0-35.3-28.7-64-64-64H64zm280 72a24 24 0 1 1 0 48 24 24 0 1 1 0-48zm48 24a24 24 0 1 1 48 0 24 24 0 1 1 -48 0zM64 288c-35.3 0-64 28.7-64 64v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V352c0-35.3-28.7-64-64-64H64zm280 72a24 24 0 1 1 0 48 24 24 0 1 1 0-48zm56 24a24 24 0 1 1 48 0 24 24 0 1 1 -48 0z" />
       </g>

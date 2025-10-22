@@ -235,15 +235,24 @@ export default function StationList({ stationListData, onStationClick, loading =
                     {filteredData.map((station) => (
             <tr
               key={station.id}
-              onClick={() => onStationClick(station.id.toString())}
-              className="hover:bg-gray-50 cursor-pointer transition-all duration-200 group"
+              className="hover:bg-gray-50 transition-all duration-200 group"
             >
               <td className="p-4">
                 {/* Desktop Layout - All in one row */}
                 <div className="hidden md:flex md:items-center md:w-full">
                   <div className="flex-1 min-w-0">
                     <div className="text-lg font-semibold text-gray-900 truncate">
-                      {station.label}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onStationClick(station.id.toString());
+                        }}
+                        className="text-lg font-semibold underline text-gray-900 bg-transparent border-none p-0 cursor-pointer"
+                      >
+                        {station.label}
+                      </button>
                     </div>
                   </div>
                   
@@ -283,7 +292,7 @@ export default function StationList({ stationListData, onStationClick, loading =
                         <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                         </svg>
-                        <span>{station.health !== null ? `${station.health}%` : 'No data'}</span>
+                        <span>{station.health === null ? 'No data' : `${station.health}%`}</span>
                       </div>
                     </div>
                     <div className="text-sm text-gray-500">Health 24h</div>
@@ -329,7 +338,7 @@ export default function StationList({ stationListData, onStationClick, loading =
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                             </svg>
-                            <span>{station.health !== null ? `${station.health}%` : 'N/A'}</span>
+                            <span>{station.health === null ? 'N/A' : `${station.health}%`}</span>
                           </div>
                         </div>
                       </div>

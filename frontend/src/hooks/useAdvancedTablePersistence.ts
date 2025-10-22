@@ -20,7 +20,7 @@ export function useAdvancedTablePersistence() {
   
   // Load state from session storage
   const loadState = useCallback((): Partial<AdvancedTableState> => {
-    if (typeof window === 'undefined') return {};
+    if (globalThis.window === undefined) return {};
     
     try {
       const savedState = sessionStorage.getItem(STORAGE_KEY);
@@ -38,7 +38,7 @@ export function useAdvancedTablePersistence() {
 
   // Save state to session storage
   const saveState = useCallback((state: Partial<AdvancedTableState>) => {
-    if (typeof window === 'undefined') return;
+    if (globalThis.window === undefined) return;
     
     try {
       const currentState = loadState();
@@ -142,7 +142,7 @@ export function useAdvancedTablePersistence() {
 
   // Clear all saved state
   const clearState = useCallback(() => {
-    if (typeof window === 'undefined') return;
+    if (globalThis.window === undefined) return;
     
     try {
       sessionStorage.removeItem(STORAGE_KEY);

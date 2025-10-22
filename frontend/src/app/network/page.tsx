@@ -6,14 +6,14 @@ import StationList, { StationListData } from '@/components/StationList'
 import AdvancedTable from '@/components/AdvancedTable'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import type { Station } from '@/types/station'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 function StationsPageContent() {
   const [stations, setStations] = useState<Station[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'detail' | 'list' | 'advanced'>('list')
-  const [searchTerm, setSearchTerm] = useState('')
+  // Removed unused searchTerm state
   
   // Data for table view
   const [tableRowData, setTableRowData] = useState<RowData[]>([])
@@ -22,6 +22,7 @@ function StationsPageContent() {
   const [listData, setListData] = useState<StationListData[]>([])
   
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     const loadStations = async () => {
@@ -88,43 +89,23 @@ function StationsPageContent() {
     }
   }, [])
 
+  // Sync viewMode with URL query param 'tab' (kept separate to avoid interfering with data loading)
+  useEffect(() => {
+    const tab = searchParams?.get('tab')
+    if (tab === 'list' || tab === 'detail' || tab === 'advanced') {
+      setViewMode(tab)
+    }
+  }, [searchParams])
+
   const handleRowClick = (stationId: string) => {
-    router.push(`/station/${stationId}`);
+    const tab = viewMode || 'list'
+    router.push(`/station/${stationId}?tab=${encodeURIComponent(tab)}`);
   };
 
-  // Filter data based on search term
-  const filteredTableData = searchTerm.trim() 
-    ? tableRowData.filter(row => {
-        const term = searchTerm.toLowerCase();
-        const searchableValues = [
-          row.label_text,
-          row.label_type,
-          row.label_id,
-          String(row.id),
-          String(row.avg_data_health_24h || ''),
-          String(row.avg_fetch_health_24h || '')
-        ];
-        return searchableValues.some(value => 
-          value.toLowerCase().includes(term)
-        );
-      })
-    : tableRowData;
+  // No searchTerm, so filtered data is just the original data
+  const filteredTableData = tableRowData;
 
-  const filteredListData = searchTerm.trim() 
-    ? listData.filter(station => {
-        const term = searchTerm.toLowerCase();
-        const searchableValues = [
-          station.label,
-          station.ip,
-          String(station.id),
-          String(station.online),
-          station.health !== null ? String(station.health) : ''
-        ];
-        return searchableValues.some(value => 
-          value.toLowerCase().includes(term)
-        );
-      })
-    : listData;
+  const filteredListData = listData;
 
   if (error) {
     return (
@@ -152,7 +133,10 @@ function StationsPageContent() {
           <div className="flex items-center gap-2">
             <div className="flex">
               <button
-                onClick={() => setViewMode('list')}
+                onClick={() => {
+                  setViewMode('list')
+                  router.push(`/network?tab=list`)
+                }}
                 className={`px-4 py-2 text-sm font-semibold transition-all relative ${
                   viewMode === 'list'
                     ? 'text-gray-500'
@@ -165,7 +149,10 @@ function StationsPageContent() {
                 )}
               </button>
               <button
-                onClick={() => setViewMode('detail')}
+                onClick={() => {
+                  setViewMode('detail')
+                  router.push(`/network?tab=detail`)
+                }}
                 className={`px-4 py-2 text-sm font-semibold transition-all relative ${
                   viewMode === 'detail'
                     ? 'text-gray-500'
@@ -178,7 +165,10 @@ function StationsPageContent() {
                 )}
               </button>
               <button
-                onClick={() => setViewMode('advanced')}
+                onClick={() => {
+                  setViewMode('advanced')
+                  router.push(`/network?tab=advanced`)
+                }}
                 className={`px-4 py-2 text-sm font-semibold transition-all relative ${
                   viewMode === 'advanced'
                     ? 'text-gray-500'
@@ -198,11 +188,12 @@ function StationsPageContent() {
       {/* Content Area */}
       <div className="flex-1 min-h-0 p-6">
         <div className="w-full h-full">
-          {viewMode === 'detail' ? (
-            (() => {
+          {(() => {
+            let content;
+            if (viewMode === 'detail') {
               if (loading) {
                 // Loading skeleton for detail
-                return (
+                content = (
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm h-full flex flex-col overflow-hidden">
                     <div className="flex-1 divide-y divide-gray-100 overflow-y-auto">
                       {Array.from({ length: 10 }).map((_, index) => {
@@ -227,7 +218,7 @@ function StationsPageContent() {
                   </div>
                 );
               } else if (stations.length === 0) {
-                return (
+                content = (
                   <div className="bg-white rounded-lg border border-gray-200 shadow-sm h-full flex items-center justify-center">
                     <div className="text-center">
                       <h3 className="text-lg font-medium text-gray-900 mb-2">No stations found</h3>
@@ -235,18 +226,23 @@ function StationsPageContent() {
                   </div>
                 );
               } else {
-                return (
+                content = (
                   <StationTable rowData={filteredTableData} onRowClick={handleRowClick} />
                 );
               }
-            })()
-          ) : viewMode === 'list' ? (
-            <StationList stationListData={filteredListData} onStationClick={handleRowClick} loading={loading} />
-          ) : (
-            <div className="h-full overflow-hidden">
-              <AdvancedTable onRowClick={(stationId) => handleRowClick(stationId.toString())} />
-            </div>
-          )}
+            } else if (viewMode === 'list') {
+              content = (
+                <StationList stationListData={filteredListData} onStationClick={handleRowClick} loading={loading} />
+              );
+            } else {
+              content = (
+                <div className="h-full overflow-hidden">
+                  <AdvancedTable onRowClick={(stationId) => handleRowClick(stationId.toString())} />
+                </div>
+              );
+            }
+            return content;
+          })()}
         </div>
       </div>
     </div>

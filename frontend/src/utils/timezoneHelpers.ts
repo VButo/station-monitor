@@ -56,7 +56,7 @@ export function showDatabaseTimeAsUTC1(timestamp: string) {
   const dbDate = new Date(timestamp);
   
   // Create a date that represents the same "wall clock" time but in UTC+1
-  const utc1Time = new Date(dbDate.getTime());
+  const utc1Time = new Date(dbDate);
   
   const correctedDate = new Date(dbDate.getTime() - (1 * 60 * 60 * 1000));
 

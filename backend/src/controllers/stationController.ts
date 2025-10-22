@@ -55,7 +55,7 @@ export async function getStationOverviewData(req: Request, res: Response) {
 export async function getStatusTable(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     const data = await stationService.getStatusTable(id);
     res.json(data);
   } catch (error: unknown) {
@@ -70,7 +70,7 @@ export async function getStatusTable(req: Request, res: Response) {
 export async function getPublicTable(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     const data = await stationService.getPublicTable(id);
     res.json(data);
   } catch (error: unknown) {
@@ -85,7 +85,7 @@ export async function getPublicTable(req: Request, res: Response) {
 export async function getMeasurementsTable(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     const data = await stationService.getMeasurementsTable(id);
     res.json(data);
   } catch (error: unknown) {
@@ -103,12 +103,12 @@ export async function getPublicTableWithDatetime(req: Request, res: Response) {
     const id = Number(req.params.id);
     const datetime = req.query.datetime as string;
     
-    if (isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
     
     // Validate datetime format
     const parsedDatetime = new Date(datetime);
-    if (isNaN(parsedDatetime.getTime())) {
+    if (Number.isNaN(parsedDatetime.getTime())) {
       return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
     }
     
@@ -127,13 +127,13 @@ export async function getStatusTableWithDatetime(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
     const datetime = req.query.datetime as string;
-    
-    if (isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
+
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
     
     // Validate datetime format
     const parsedDatetime = new Date(datetime);
-    if (isNaN(parsedDatetime.getTime())) {
+    if (Number.isNaN(parsedDatetime.getTime())) {
       return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
     }
     
@@ -152,13 +152,13 @@ export async function getMeasurementsTableWithDatetime(req: Request, res: Respon
   try {
     const id = Number(req.params.id);
     const datetime = req.query.datetime as string;
-    
-    if (isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
+
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
     
     // Validate datetime format
     const parsedDatetime = new Date(datetime);
-    if (isNaN(parsedDatetime.getTime())) {
+    if (Number.isNaN(parsedDatetime.getTime())) {
       return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
     }
     

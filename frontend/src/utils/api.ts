@@ -12,10 +12,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Only redirect if we're not already on the login page
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      if (globalThis.window !== undefined && globalThis.window.location.pathname !== '/login') {
         console.warn('API: Authentication failed, redirecting to login');
-        window.location.href = '/login';
-      } else if (typeof window !== 'undefined') {
+        globalThis.window.location.href = '/login';
+      } else if (globalThis.window !== undefined) {
         console.warn('API: Authentication failed on login page, ignoring redirect');
       }
     }

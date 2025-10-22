@@ -40,7 +40,7 @@ app.use('/api', overviewRoutes);
 // Error handler
 app.use(errorHandler);
 
-const PORT = process.env.PORT? parseInt(process.env.PORT) : 4000;
+const PORT = process.env.PORT? Number.parseInt(process.env.PORT) : 4000;
 const HOST = '0.0.0.0';
 
 // Start the advanced data scheduler

@@ -123,7 +123,28 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
       cellStyle: { fontWeight: '600', fontSize: '16px' }, 
       minWidth: isMobile ? 150 : 250, 
       width: isMobile ? 200 : undefined,
-      flex: isMobile ? undefined : 1 
+      flex: isMobile ? undefined : 1,
+      // Only the Name is clickable; rows are not clickable
+      cellRenderer: (params: ICellRendererParams) => {
+        const id = params.data?.id;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                onRowClick(String(id));
+              } catch (err) {
+                console.error('Error navigating to station:', err);
+              }
+            }}
+            className="text-lg underline text-gray-900 bg-transparent border-none p-0 cursor-pointer"
+          >
+            {params.value}
+          </button>
+        );
+      }
     },
     { 
       headerName: 'Type', 
@@ -138,7 +159,7 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
       minWidth: isMobile ? 90 : 100, 
       width: isMobile ? 110 : undefined,
       maxWidth: isMobile ? 130 : 180, 
-      valueFormatter: params => params.value != null ? `${params.value}%` : '' 
+      valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%` 
     },
     { 
       headerName: 'Online (24h)', 
@@ -146,7 +167,7 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
       minWidth: isMobile ? 90 : 100, 
       width: isMobile ? 110 : undefined,
       maxWidth: isMobile ? 130 : 180, 
-      valueFormatter: params => params.value != null ? `${params.value}%` : '' 
+      valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`
     },
     {
       headerName: 'Online graph (24h)',
@@ -169,7 +190,7 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
       <div className="w-full mb-4">
         <div className="max-w-5xl mx-auto">
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               {/* Search and Reset row */}
               <div className="flex items-center gap-3">
                 <div className="relative">
@@ -197,7 +218,7 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
               </div>
 
               {/* Station count row */}
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 whitespace-nowrap">
                 {isFiltered ? (
                   <>Showing {filteredCount} of {rowCount} stations</>
                 ) : (
@@ -236,11 +257,7 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
               onGridReady={onGridReady}
               onModelUpdated={onModelUpdated}
               onFilterChanged={onFilterChanged}
-              onRowClicked={event => {
-                const id = event.data.id;
-                console.log('Row clicked, station ID:', id);
-                onRowClick(id);
-              }}
+              // Rows are not clickable; only the Name cell will navigate
               suppressHorizontalScroll={false}
               alwaysShowHorizontalScroll={isMobile}
             />

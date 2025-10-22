@@ -215,11 +215,11 @@ export default function ReportPage() {
     document.head.appendChild(styleSheet);
     
     // Use regular print dialog
-    window.print();
+    globalThis.print();
     
     // Clean up
     setTimeout(() => {
-      document.head.removeChild(styleSheet);
+      styleSheet.remove();
     }, 1000);
   };
 

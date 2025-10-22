@@ -195,9 +195,9 @@ export async function fetchStationById(id: number) {
 // Helper function to convert key-value array to object
 function keyValueArrayToObject(keyValueArray: any[]): Record<string, string> {
   const result: Record<string, string> = {};
-  keyValueArray.forEach(item => {
+  for (const item of keyValueArray) {
     result[item.key] = item.value;
-  });
+  }
   return result;
 }
 
@@ -322,11 +322,11 @@ export async function fetchAdvancedStationData() {
     const statusKeys = new Set<string>();
     const measurementKeys = new Set<string>();
 
-    advancedData.forEach(station => {
-      Object.keys(station.public_data).forEach(key => publicKeys.add(key));
-      Object.keys(station.status_data).forEach(key => statusKeys.add(key));
-      Object.keys(station.measurements_data).forEach(key => measurementKeys.add(key));
-    });
+    for (const station of advancedData) {
+      for (const key of Object.keys(station.public_data)) publicKeys.add(key);
+      for (const key of Object.keys(station.status_data)) statusKeys.add(key);
+      for (const key of Object.keys(station.measurements_data)) measurementKeys.add(key);
+    }
 
     console.log('Final aggregated keys:', {
       publicKeysCount: publicKeys.size,
@@ -339,9 +339,9 @@ export async function fetchAdvancedStationData() {
     const statusTemplate: Record<string, string> = {};
     const measurementsTemplate: Record<string, string> = {};
 
-    publicKeys.forEach(key => publicTemplate[key] = '');
-    statusKeys.forEach(key => statusTemplate[key] = '');
-    measurementKeys.forEach(key => measurementsTemplate[key] = '');
+    for (const key of publicKeys) publicTemplate[key] = '';
+    for (const key of statusKeys) statusTemplate[key] = '';
+    for (const key of measurementKeys) measurementsTemplate[key] = '';
 
     return {
       stations: advancedData,

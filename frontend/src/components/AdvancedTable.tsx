@@ -8,10 +8,11 @@ import {
   AllCommunityModule,
   ColDef,
   GridReadyEvent,
-  GridApi
+  GridApi,
+  ICellRendererParams
 } from 'ag-grid-community';
 import { AdvancedStationData } from '@/types/station';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import * as ExcelJS from 'exceljs';
 import ThreeStateCheckbox from './ThreeStateCheckbox';
 import TimelineCell from './TimelineCell';
@@ -21,7 +22,7 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 
 interface AdvancedTableProps {
   readonly className?: string;
-  readonly height?: string;
+  // readonly height?: string;
   readonly onRowClick?: (stationId: number) => void;
   readonly defaultSelectedColumns?: readonly string[];
   readonly showControls?: boolean;
@@ -29,7 +30,7 @@ interface AdvancedTableProps {
 
 export default function AdvancedTable({
   className = "",
-  height = "",
+  // height = "",
   onRowClick,
   defaultSelectedColumns = [
     'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg',
@@ -38,6 +39,7 @@ export default function AdvancedTable({
   showControls = true
 }: AdvancedTableProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [stationData, setStationData] = useState<AdvancedStationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -281,9 +283,10 @@ export default function AdvancedTable({
     if (onRowClick) {
       onRowClick(stationId);
     } else {
-      router.push(`/station/${stationId}`);
+      const tab = searchParams?.get('tab') || 'list'
+      router.push(`/station/${stationId}?tab=${encodeURIComponent(tab)}`);
     }
-  }, [onRowClick, router]);
+  }, [onRowClick, router, searchParams]);
 
   // Column visibility management
   const toggleColumnVisibility = useCallback((columnId: string, isVisible: boolean) => {
@@ -333,13 +336,13 @@ export default function AdvancedTable({
     
     setSelectedColumns(prev => {
       const newSet = new Set(prev);
-      columnsToToggle.forEach(colId => {
+      for (const colId of columnsToToggle) {
         if (isVisible) {
           newSet.add(colId);
         } else {
           newSet.delete(colId);
         }
-      });
+      }
       return newSet;
     });
   }, [stationData, columnStructure]);
@@ -474,7 +477,7 @@ export default function AdvancedTable({
       });
 
       // Add data rows
-      rowData.forEach(row => {
+      for (const row of rowData) {
         const rowValues = visibleColumns.map(col => {
           const field = col.field;
           if (!field) return '';
@@ -490,7 +493,7 @@ export default function AdvancedTable({
           return value ?? '';
         });
         worksheet.addRow(rowValues);
-      });
+      }
 
       // Style headers
       const headerRow = worksheet.getRow(1);
@@ -502,14 +505,14 @@ export default function AdvancedTable({
       };
 
       // Auto-fit columns
-      worksheet.columns.forEach((column, index) => {
+      for (const [index, column] of worksheet.columns.entries()) {
         const header = headers[index];
         const maxLength = Math.max(
           header?.length || 0,
           15 // minimum width
         );
         column.width = Math.min(maxLength * 1.2, 50); // max width of 50
-      });
+      }
 
       // Generate and download file
       const buffer = await workbook.xlsx.writeBuffer();
@@ -517,14 +520,14 @@ export default function AdvancedTable({
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
       });
       
-      const url = window.URL.createObjectURL(blob);
+      const url = globalThis.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `station_data_${new Date().toISOString().split('T')[0]}.xlsx`;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      link.remove();
+      globalThis.URL.revokeObjectURL(url);
       
       setShowExportDropdown(false);
     } catch (error) {
@@ -588,6 +591,22 @@ export default function AdvancedTable({
       minWidth: 200,
       flex: 1,
       cellStyle: { fontWeight: '600', fontSize: '16px' },
+      cellRenderer: (params: ICellRendererParams) => {
+        const id = params.data?.id;
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleRowClick(Number(id));
+            }}
+            className="text-lg underline text-gray-900 bg-transparent border-none p-0 cursor-pointer"
+          >
+            {params.value}
+          </button>
+        );
+      },
       filter: 'agTextColumnFilter',
       filterParams: { buttons: ['reset', 'apply'], debounceMs: 300 }
     });
@@ -673,7 +692,7 @@ export default function AdvancedTable({
         field: 'avg_fetch_health_24h',
         minWidth: 120,
         maxWidth: 150,
-        valueFormatter: params => params.value != null ? `${params.value}%` : '',
+        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
       });
@@ -685,7 +704,7 @@ export default function AdvancedTable({
         field: 'avg_fetch_health_7d',
         minWidth: 120,
         maxWidth: 150,
-        valueFormatter: params => params.value != null ? `${params.value}%` : '',
+        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
       });
@@ -732,7 +751,7 @@ export default function AdvancedTable({
         field: 'avg_data_health_24h',
         minWidth: 120,
         maxWidth: 180,
-        valueFormatter: params => params.value != null ? `${params.value}%` : '',
+        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
       });
@@ -744,7 +763,7 @@ export default function AdvancedTable({
         field: 'avg_data_health_7d',
         minWidth: 130,
         maxWidth: 170,
-        valueFormatter: params => params.value != null ? `${params.value}%` : '',
+        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
       });
@@ -773,7 +792,7 @@ export default function AdvancedTable({
     }
 
     // Dynamic public data columns
-    Object.keys(columnStructure.public_data).forEach(key => {
+    for (const key of Object.keys(columnStructure.public_data)) {
       const colId = `public_data.${key}`;
       if (selectedColumns.has(colId)) {
         // Check if the value is numeric by sampling multiple stations (some might not have data)
@@ -782,7 +801,7 @@ export default function AdvancedTable({
           const sampleValue = station?.public_data?.[key];
           if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
             const numValue = Number(sampleValue);
-            if (!isNaN(numValue)) {
+            if (!Number.isNaN(numValue)) {
               isNumeric = true;
               break; // Found a valid numeric sample, use it to determine filter type
             }
@@ -795,8 +814,8 @@ export default function AdvancedTable({
           minWidth: 120,
           valueGetter: params => params.data?.public_data?.[key] || '',
           comparator: isNumeric ? (valueA, valueB) => {
-            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || isNaN(Number(valueA))) ? -Infinity : Number(valueA);
-            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || isNaN(Number(valueB))) ? -Infinity : Number(valueB);
+            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || Number.isNaN(Number(valueA))) ? -Infinity : Number(valueA);
+            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || Number.isNaN(Number(valueB))) ? -Infinity : Number(valueB);
             return numA - numB;
           } : undefined,
           filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
@@ -805,7 +824,7 @@ export default function AdvancedTable({
           }
         });
       }
-    });
+    }
 
     // Status timestamp column
     if (selectedColumns.has('status_timestamp')) {
@@ -830,7 +849,7 @@ export default function AdvancedTable({
     }
 
     // Dynamic status data columns
-    Object.keys(columnStructure.status_data).forEach(key => {
+    for (const key of Object.keys(columnStructure.status_data)) {
       const colId = `status_data.${key}`;
       if (selectedColumns.has(colId)) {
         // Check if the value is numeric by sampling multiple stations (some might not have data)
@@ -839,7 +858,7 @@ export default function AdvancedTable({
           const sampleValue = station?.status_data?.[key];
           if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
             const numValue = Number(sampleValue);
-            if (!isNaN(numValue)) {
+            if (!Number.isNaN(numValue)) {
               isNumeric = true;
               break; // Found a valid numeric sample, use it to determine filter type
             }
@@ -853,8 +872,8 @@ export default function AdvancedTable({
           valueGetter: params => params.data?.status_data?.[key] || '',
           comparator: isNumeric ? (valueA, valueB) => {
             // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
-            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || isNaN(Number(valueA))) ? -Infinity : Number(valueA);
-            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || isNaN(Number(valueB))) ? -Infinity : Number(valueB);
+            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || Number.isNaN(Number(valueA))) ? -Infinity : Number(valueA);
+            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || Number.isNaN(Number(valueB))) ? -Infinity : Number(valueB);
             return numA - numB;
           } : undefined,
           filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
@@ -863,7 +882,7 @@ export default function AdvancedTable({
           }
         });
       }
-    });
+    }
 
     // Measurements timestamp
     if (selectedColumns.has('measurements_timestamp')) {
@@ -891,7 +910,7 @@ export default function AdvancedTable({
     }
 
     // Dynamic measurements data columns
-    Object.keys(columnStructure.measurements_data).forEach(key => {
+    for (const key of Object.keys(columnStructure.measurements_data)) {
       const colId = `measurements_data.${key}`;
       if (selectedColumns.has(colId)) {
         // Check if the value is numeric by sampling multiple stations (some might not have data)
@@ -900,7 +919,7 @@ export default function AdvancedTable({
           const sampleValue = station?.measurements_data?.[key];
           if (sampleValue !== undefined && sampleValue !== null && sampleValue !== '' && !Array.isArray(sampleValue) && sampleValue !== 'NaN') {
             const numValue = Number(sampleValue);
-            if (!isNaN(numValue)) {
+            if (!Number.isNaN(numValue)) {
               isNumeric = true;
               break; // Found a valid numeric sample, use it to determine filter type
             }
@@ -914,8 +933,8 @@ export default function AdvancedTable({
           valueGetter: params => params.data?.measurements_data?.[key] || '',
           comparator: isNumeric ? (valueA, valueB) => {
             // Convert values to numbers for sorting, treating invalid values as -Infinity (sorts to bottom)
-            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || isNaN(Number(valueA))) ? -Infinity : Number(valueA);
-            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || isNaN(Number(valueB))) ? -Infinity : Number(valueB);
+            const numA = (valueA === undefined || valueA === null || valueA === '' || valueA === 'NaN' || Number.isNaN(Number(valueA))) ? -Infinity : Number(valueA);
+            const numB = (valueB === undefined || valueB === null || valueB === '' || valueB === 'NaN' || Number.isNaN(Number(valueB))) ? -Infinity : Number(valueB);
             return numA - numB;
           } : undefined,
           filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
@@ -924,10 +943,10 @@ export default function AdvancedTable({
           }
         });
       }
-    });
+    }
 
     return columns;
-  }, [selectedColumns, columnStructure, stationData, isMobile]);
+  }, [selectedColumns, columnStructure, stationData, isMobile, handleRowClick]);
 
   // Update column pinning when mobile state changes
   useEffect(() => {
@@ -965,7 +984,7 @@ export default function AdvancedTable({
         <div className="text-center">
           <p className="text-red-600 mb-4">{error}</p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => globalThis.location.reload()}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             Retry
@@ -980,7 +999,7 @@ export default function AdvancedTable({
       {/* Controls Section */}
       {showControls && (
         <div className="mb-4">
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm max-w-5xl mx-auto p-4">
+          <div className="w-full bg-white rounded-lg border border-gray-200 shadow-sm mx-auto p-4">
             {/* Mobile layout - 2 rows */}
             <div className="flex flex-col gap-4 md:hidden">
               {/* First row: Columns button and search */}
@@ -1274,7 +1293,7 @@ export default function AdvancedTable({
                 placeholder="Search stations..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1627,7 +1646,7 @@ export default function AdvancedTable({
                 placeholder="Search stations..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 text-gray-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2000,10 +2019,7 @@ export default function AdvancedTable({
             onFilterChanged={onFilterChanged}
             onModelUpdated={onModelUpdated}
             animateRows={false}
-            onRowClicked={(event) => {
-              const id = event.data.id;
-              handleRowClick(id);
-            }}
+            // Rows are not clickable; only Name column is clickable via cellRenderer
             suppressMenuHide={true}
             rowSelection="multiple"
             defaultColDef={{

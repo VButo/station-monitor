@@ -29,8 +29,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       }
     };
 
-    window.addEventListener('error', handleError);
-    return () => window.removeEventListener('error', handleError);
+    globalThis.addEventListener('error', handleError);
+    return () => globalThis.removeEventListener('error', handleError);
   }, []);
 
   useEffect(() => {
@@ -176,11 +176,18 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
               {/* Click outside closing overlays */}
               {(mobileMenuOpen || dropdownOpen) && (
-                <div
-                  className="fixed inset-0 z-30 bg-transparent"
-                  onClick={(e) => {
-                    // Only close if clicking on the overlay itself, not its children
-                    if (e.target === e.currentTarget) {
+                <button
+                  type="button"
+                  className="fixed inset-0 z-30 bg-transparent cursor-default"
+                  aria-label="Close menu overlay"
+                  tabIndex={0}
+                  style={{ padding: 0, margin: 0, border: 'none' }}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setDropdownOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
                       setMobileMenuOpen(false);
                       setDropdownOpen(false);
                     }
