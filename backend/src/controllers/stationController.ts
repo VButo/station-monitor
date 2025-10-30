@@ -52,6 +52,52 @@ export async function getStationOverviewData(req: Request, res: Response) {
   }
 }
 
+export async function getHourlyAverageFetchHealth(req: Request, res: Response) {
+  try {
+    // Call the new RPC function directly
+    const { data, error } = await supabase.rpc('get_hourly_avg_fetch_health');
+
+    if (error) {
+      console.error('Error fetching hourly average fetch health data:', error);
+      throw new Error('Failed to fetch hourly average fetch health data');
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Error in getHourlyAverageFetchHealth:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch hourly average fetch health data'
+    });
+  }
+}
+
+export async function getHourlyAverageFetchHealth7d(req: Request, res: Response) {
+  try {
+    // Call the new RPC function directly
+    const { data, error } = await supabase.rpc('get_hourly_avg_fetch_health7d');
+
+    if (error) {
+      console.error('Error fetching hourly average fetch health data:', error);
+      throw new Error('Failed to fetch hourly average fetch health data');
+    }
+    
+    res.status(200).json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Error in getHourlyAverageFetchHealth:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch hourly average fetch health data'
+    });
+  }
+}
+
 export async function getStatusTable(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);

@@ -133,11 +133,11 @@ function StationsPageContent() {
   return (
     <div className="h-full bg-gray-50 flex flex-col">
       {/* Header Section */}
-      <div className="px-6 py-4 flex-shrink-0">
+      <div className="px-6 pt-4 flex-shrink-0">
         <div className="flex items-center justify-between max-w-5xl mx-auto mt-2">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">Network</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Network Explorer</h1>
             </div>
           </div>
           

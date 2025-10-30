@@ -97,7 +97,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <div className="flex items-center justify-between max-w-5xl mx-auto">
                 <div className="flex items-center gap-8">
                   <Link href="/overview" className="flex items-center gap-2">
-                    <Image src="/metmonic_logo.svg" alt="Metmonic Logo" width={270} height={50} priority style={{ height: 'auto'}}/>
+                    <Image src="/DT_Monitor.png" alt="Metmonic Logo" width={200} height={50} priority style={{ height: 'auto'}}/>
                   </Link>
 
                   {/* Desktop Menu */}

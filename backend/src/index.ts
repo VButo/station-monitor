@@ -2,13 +2,16 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { initSocket } from './utils/socket'
 import stationRoutes from './routes/stationRoutes';
 import userRoutes from './routes/userRoutes';
+import smsRoutes from './routes/smsRoutes';
 import overviewRoutes from './routes/overviewRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { advancedDataScheduler } from './services/schedulerService';
 
 const app = express();
+app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 app.use((req, res, next) => {
@@ -23,7 +26,9 @@ const allowedOrigin = [
   process.env.SITE_URL || 'http://localhost:3000',
   'http://192.168.99.10:3000',   // External/exposed IP - primary
   'http://192.168.100.34:3000',  // Local network IP - backup
-  'http://localhost:3000'        // Local development
+  'http://localhost:3000',        // Local development
+  'http://192.168.10.1',           // Outside router IP
+  'http://192.168.10.10:4001'      // Outside router IP
 ];
 app.use(cors({
   origin: allowedOrigin,
@@ -36,6 +41,7 @@ app.use(cookieParser());
 app.use('/api/stations', stationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api', overviewRoutes);
+app.use('/api/sms', smsRoutes);
 
 // Error handler
 app.use(errorHandler);
@@ -47,11 +53,22 @@ const HOST = '0.0.0.0';
 console.log('Starting advanced data scheduler...');
 advancedDataScheduler.start();
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`Backend server running on ${HOST}:${PORT}`);
   console.log(`Local access: http://localhost:${PORT}`);
   console.log(`Network access: http://192.168.100.34:${PORT}`); // Local network IP
-  console.log(`External access: http://192.168.99.10:${PORT}`); // External/exposed IP
+  console.log(`External access: http://192.168.99.10:${PORT}`); // External-exposed IP
   console.log('Advanced data caching enabled - /api/stations/advanced-table serves cached data only');
   console.log('Data refreshes automatically every 10 minutes on the 9th minute (9, 19, 29, etc.)');
-});
+
+  // Initialize socket.io server (async)
+  ;(async () => {
+    try {
+      const allowedOrigin = [process.env.SITE_URL || 'http://localhost:3000']
+      await initSocket(server as unknown as import('http').Server, allowedOrigin)
+      console.log('Socket.io initialized')
+    } catch (e) {
+      console.warn('Failed to initialize socket.io', e)
+    }
+  })()
+})

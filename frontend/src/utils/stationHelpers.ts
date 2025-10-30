@@ -1,4 +1,4 @@
-import type { Station, HourStatus, AvgStatus, CollectorDataKeyValue, AdvancedStationData, StationHourlyData } from '@/types/station'
+import type { Station, HourStatus, AvgStatus, CollectorDataKeyValue, AdvancedStationData, StationHourlyData, HourlyAvgFetchHealth } from '@/types/station'
 import api from './api';
 
 export async function fetchStations(): Promise<Station[]> {
@@ -13,6 +13,16 @@ export async function fetchStationStatus(): Promise<HourStatus[]> {
 
 export async function fetchStationOverviewData(): Promise<StationHourlyData[]> {
   const res = await api.get<{ success: boolean; data: StationHourlyData[] }>(`/stations/station-overview`);
+  return res.data.data;
+}
+
+export async function fetchHourlyAvgFetchHealth(): Promise<HourlyAvgFetchHealth[]> {
+  const res = await api.get<{ success: boolean; data: HourlyAvgFetchHealth[] }>(`/stations/hourly-average-fetch-health`);
+  return res.data.data;
+}
+
+export async function fetchHourlyAvgFetchHealth7d(): Promise<HourlyAvgFetchHealth[]> {
+  const res = await api.get<{ success: boolean; data: HourlyAvgFetchHealth[] }>(`/stations/hourly-average-fetch-health-7d`);
   return res.data.data;
 }
 

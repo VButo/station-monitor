@@ -9,6 +9,7 @@ import MeasurementsTab from './components/MeasurementsTab';
 import ModemTab from './components/ModemTab';
 import PublicLiveTab from './components/PublicLiveTab';
 import { useRouter, useSearchParams } from 'next/navigation';
+type StationTab = 'overview' | 'public' | 'status' | 'measurements' | 'modem' | 'public-live'
 import StationSelector from '@/components/StationSelector';
 
 interface StationPageProps {
@@ -26,7 +27,7 @@ export default function StationPage(props: StationPageProps) {
   const [measurementsData, setMeasurementsData] = useState<CollectorDataKeyValue[]>([]);
   const [hourlyData, setHourlyData] = useState<StationHourlyData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'public' | 'status' | 'measurements' | 'modem' | 'public-live'>('overview');
+  const [selectedTab, setSelectedTab] = useState<StationTab>('overview');
 
   // Additional state for dropdown
   const [stationsList, setStationsList] = useState<Station[]>([]);
@@ -62,20 +63,45 @@ export default function StationPage(props: StationPageProps) {
   }, [stationIdNum]);
 
   const handleStationSelect = (id: number) => {
-    setSelectedTab('overview'); // optional reset
-    const tab = searchParams?.get('tab') || 'list'
+    // keep the current tab in the URL so when moving between stations the same tab is preserved
+    const tab = searchParams?.get('tab') ?? selectedTab ?? 'overview'
     router.push(`/station/${id}?tab=${encodeURIComponent(tab)}`);
   };
+
+  // Sync selected tab from URL when the search params actually change (do NOT
+  // run when `selectedTab` state changes). This prevents a race where an
+  // optimistic local setSelectedTab (on click) is reverted by the old URL value
+  // while router.replace() is still pending — which caused the jitter.
+  useEffect(() => {
+    const t = searchParams?.get('tab')
+    if (!t) return
+    // only set if it's one of the allowed tabs
+    const allowed = new Set(['overview','public','status','measurements','modem','public-live'])
+    if (allowed.has(t)) {
+      setSelectedTab(t as StationTab)
+    }
+  }, [searchParams]);
+
+  // Helper to update tab state and push tab param into the URL
+  const setTabAndPush = (tab: 'overview' | 'public' | 'status' | 'measurements' | 'modem' | 'public-live') => {
+    setSelectedTab(tab)
+    // update URL to preserve tab when navigating away
+    router.replace(`/station/${stationIdNum}?tab=${encodeURIComponent(tab)}`)
+  }
 
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#fafbfc', maxWidth: '100%', display: 'flex', justifyContent: 'center', paddingTop: 32, paddingBottom: 32 }}>
         <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px #0001', padding: '32px 36px', minWidth: '50%', maxWidth: '100%' }}>
           <div style={{ height: 24, width: 200, backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 28, animation: 'pulse 1.5s infinite' }} />
-          {Array.from({ length: 15 }).map((_, i) => (
-            
-            <div key={`skeleton-${i}`} style={{ height: 20, width: '100%', backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
-          ))}
+          {(() => {
+            const SKELETON_KEYS = [
+              'sk-1','sk-2','sk-3','sk-4','sk-5','sk-6','sk-7','sk-8','sk-9','sk-10','sk-11','sk-12','sk-13','sk-14','sk-15'
+            ]
+            return SKELETON_KEYS.map((k) => (
+              <div key={k} style={{ height: 20, width: '100%', backgroundColor: '#e0e0e0', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
+            ))
+          })()}
 
           <style>{`
             @keyframes pulse {
@@ -104,7 +130,7 @@ export default function StationPage(props: StationPageProps) {
       case 'measurements':
         return <MeasurementsTab measurementsData={measurementsData} />;
       case 'modem':
-        return <ModemTab />;
+        return <ModemTab station={station} />;
       case 'public-live':
         return <PublicLiveTab />;
       default:
@@ -115,11 +141,11 @@ export default function StationPage(props: StationPageProps) {
   return (
     <div className="h-full bg-gray-50 flex flex-col">
       {/* Header Section */}
-      <div className="px-6 py-4 flex-shrink-0">
+      <div className="px-6 pt-4 flex-shrink-0">
         <div className="flex items-center justify-between max-w-5xl mx-auto mt-2">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-gray-900">{station.label}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Station {station.label}</h1>
             </div>
           </div>
         </div>
@@ -138,7 +164,7 @@ export default function StationPage(props: StationPageProps) {
               <div className="flex items-center gap-2 mt-4">
                 <div className="flex flex-wrap md:flex-nowrap">
                   <button
-                    onClick={() => setSelectedTab('overview')}
+                    onClick={() => setTabAndPush('overview')}
                     className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
                       selectedTab === 'overview'
                         ? 'text-gray-500'
@@ -151,7 +177,7 @@ export default function StationPage(props: StationPageProps) {
                     )}
                   </button>
                   <button
-                    onClick={() => setSelectedTab('public')}
+                    onClick={() => setTabAndPush('public')}
                     className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
                       selectedTab === 'public'
                         ? 'text-gray-500'
@@ -164,7 +190,7 @@ export default function StationPage(props: StationPageProps) {
                     )}
                   </button>
                   <button
-                    onClick={() => setSelectedTab('status')}
+                    onClick={() => setTabAndPush('status')}
                     className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
                       selectedTab === 'status'
                         ? 'text-gray-500'
@@ -177,7 +203,7 @@ export default function StationPage(props: StationPageProps) {
                     )}
                   </button>
                   <button
-                    onClick={() => setSelectedTab('measurements')}
+                    onClick={() => setTabAndPush('measurements')}
                     className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
                       selectedTab === 'measurements'
                         ? 'text-gray-500'
@@ -190,7 +216,7 @@ export default function StationPage(props: StationPageProps) {
                     )}
                   </button>
                   <button
-                    onClick={() => setSelectedTab('modem')}
+                    onClick={() => setTabAndPush('modem')}
                     className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
                       selectedTab === 'modem'
                         ? 'text-gray-500'
@@ -203,7 +229,7 @@ export default function StationPage(props: StationPageProps) {
                     )}
                   </button>
                   <button
-                    onClick={() => setSelectedTab('public-live')}
+                    onClick={() => setTabAndPush('public-live')}
                     className={`px-4 py-2 text-sm font-semibold transition-all relative w-1/3 md:w-auto ${
                       selectedTab === 'public-live'
                         ? 'text-gray-500'

@@ -181,7 +181,7 @@ export async function getMeasurementsTableWithDatetime(id: number, datetime: Dat
 }
 
 export async function fetchStations() {
-  const { data, error } = await supabase.from('stations').select('*');
+  const { data, error } = await supabase.from('stations').select('*').order('id', { ascending: true });
   if (error) throw error;
   return data;
 }

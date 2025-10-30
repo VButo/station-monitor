@@ -24,4 +24,24 @@ export class UserService {
     if (error) throw error
     return data.user
   }
+
+  // Get multiple users by their auth UIDs (requires service role key)
+  async getUsersByIds(ids: string[]) {
+    const results: Array<{ id: string; email: string | null }> = []
+    for (const id of ids) {
+      try {
+        const { data, error } = await supabase.auth.admin.getUserById(id)
+        if (error) {
+          console.warn('getUserById error for', id, error)
+          results.push({ id, email: null })
+        } else {
+          results.push({ id, email: data?.user?.email ?? null })
+        }
+      } catch (e) {
+        console.warn('Exception when fetching user by id', id, e)
+        results.push({ id, email: null })
+      }
+    }
+    return results
+  }
 }

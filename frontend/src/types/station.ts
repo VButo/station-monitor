@@ -51,6 +51,11 @@ export interface StationHourlyData {
   hour_bucket_local: string[]
 }
 
+export interface HourlyAvgFetchHealth {
+  hourly_avg_fetch_health_array: number[]
+  hour_bucket_local: string[]
+}
+
 export interface CollectorDataKeyValue {
   station_id: number
   collection_id: number
@@ -94,4 +99,17 @@ export interface AdvancedStationData {
   // Metadata
   last_updated?: string
   total_measurements?: number
+}
+
+export interface SmsMessage {
+  id: number
+  station_id: number
+  user_id?: string | null
+  number: string
+  message: string
+  status: number, // OUTBOX by default
+  time: string
+  unread: boolean
+  deleted: boolean
+  retry_number: number
 }

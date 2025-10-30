@@ -30,7 +30,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, fallback }) =
     const timeoutId = setTimeout(() => {
       if (loading) {
         console.warn('Authentication check timed out, redirecting to login');
-        window.location.href = '/login';
+        globalThis.location.href = '/login';
       }
     }, 3000);
 

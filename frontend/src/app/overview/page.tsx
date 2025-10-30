@@ -1,8 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute'
 import dynamic from 'next/dynamic';
 import { getOverviewData24h, getOverviewData7d, getOnlineData24h, getOnlineData7d } from '@/utils/api';
+import { fetchHourlyAvgFetchHealth, fetchHourlyAvgFetchHealth7d } from '@/utils/stationHelpers';
+import type { HourlyAvgFetchHealth } from '@/types/station';
 
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -157,19 +159,21 @@ interface TooltipParams {
 
 // Process online data for the chart (works for both 24h and 7d)
 const processOnlineData = (data: OnlineData24h[] | OnlineData7d[]): ChartDataPoint[] => {
+  // (performance marks removed)
+
   // Aggregate all station states by hour using the new data structure
   const hourlyData = new Map<string, { online: number; offline: number }>();
-  
+
   for (const station of data) {
     // Each station has hourly_online_array and hour_bucket_local arrays
     for (const [index, isOnline] of station.hourly_online_array.entries()) {
       const hourBucket = station.hour_bucket_local[index];
       if (!hourBucket) continue; // Skip if no corresponding hour bucket
-      
+
       if (!hourlyData.has(hourBucket)) {
         hourlyData.set(hourBucket, { online: 0, offline: 0 });
       }
-      
+
       if (isOnline) {
         hourlyData.get(hourBucket)!.online++;
       } else {
@@ -187,64 +191,84 @@ const processOnlineData = (data: OnlineData24h[] | OnlineData7d[]): ChartDataPoi
       offline: counts.offline
     });
   }
-  
-  return result.sort((a, b) => a.timestamp - b.timestamp);
+
+  result.sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = result;
+
+  // (performance marks removed)
+
+  return sorted;
 };
 
-// Helper function to aggregate health values by hour
-const aggregateHealthByHour = (data: OnlineData24h[] | OnlineData7d[]): Map<string, { healthValues: number[] }> => {
-  const hourlyHealthData = new Map<string, { healthValues: number[] }>();
-  
+// Helper function to aggregate health values by hour (summary statistics to avoid large arrays)
+type HealthSummary = { sum: number; count: number; min: number; max: number };
+
+const createEmptySummary = (): HealthSummary => ({ sum: 0, count: 0, min: Infinity, max: -Infinity });
+
+const getOrCreateSummary = (map: Map<string, HealthSummary>, key: string): HealthSummary => {
+  let summary = map.get(key);
+  if (!summary) {
+    summary = createEmptySummary();
+    map.set(key, summary);
+  }
+  return summary;
+};
+
+const updateSummaryWithValue = (summary: HealthSummary, rawValue: number | undefined | null = 0) => {
+  const value = rawValue ?? 0;
+  summary.sum += value;
+  summary.count += 1;
+  // Preserve previous behavior: treat 0 as "missing" for min/max calculations
+  if (value !== 0) {
+    summary.min = Math.min(summary.min, value);
+    summary.max = Math.max(summary.max, value);
+  }
+};
+
+const aggregateHealthByHour = (data: OnlineData24h[] | OnlineData7d[]): Map<string, { sum: number; count: number; min: number; max: number }> => {
+  const hourlyHealthData = new Map<string, HealthSummary>();
+
   for (const station of data) {
-    for (const [index, healthValue] of station.hourly_health_array.entries()) {
-      const hourBucket = station.hour_bucket_local[index];
+    const { hourly_health_array, hour_bucket_local } = station;
+    for (const [index, healthValue] of hourly_health_array.entries()) {
+      const hourBucket = hour_bucket_local[index];
       if (!hourBucket) continue;
-      
-      if (!hourlyHealthData.has(hourBucket)) {
-        hourlyHealthData.set(hourBucket, { healthValues: [] });
-      }
-      
-      const bucket = hourlyHealthData.get(hourBucket)!;
-      bucket.healthValues.push(healthValue ?? 0);
+
+      const bucket = getOrCreateSummary(hourlyHealthData, hourBucket);
+      updateSummaryWithValue(bucket, healthValue);
     }
   }
-  
+
   return hourlyHealthData;
 };
 
-// Helper function to calculate health statistics
-const calculateHealthStats = (healthValues: number[]) => {
-  const nonNullValues = healthValues.filter(val => val !== 0);
-  
-  const avgHealth = healthValues.length > 0 
-    ? healthValues.reduce((sum, val) => sum + val, 0) / healthValues.length 
-    : 0;
-  
-  const minHealth = nonNullValues.length > 0 ? Math.min(...nonNullValues) : 0;
-  const maxHealth = nonNullValues.length > 0 ? Math.max(...nonNullValues) : 0;
-  
-  return {
-    avgHealth: Math.round(avgHealth * 100) / 100,
-    minHealth: Math.round(minHealth * 100) / 100,
-    maxHealth: Math.round(maxHealth * 100) / 100
-  };
-};
+// Note: we replaced the array-based stats computation with summary stats in aggregateHealthByHour
 
 // Process health data for the chart (works for both 24h and 7d)
 const processHealthData = (data: OnlineData24h[] | OnlineData7d[]): HealthChartDataPoint[] => {
+  // (performance marks removed)
+
   const hourlyHealthData = aggregateHealthByHour(data);
-  
   const result = [];
-  for (const [hourBucket, data] of hourlyHealthData.entries()) {
-    const stats = calculateHealthStats(data.healthValues);
-    
+  for (const [hourBucket, summary] of hourlyHealthData.entries()) {
+    const avg = summary.count > 0 ? summary.sum / summary.count : 0;
+    const min = summary.min === Infinity ? 0 : summary.min;
+    const max = summary.max === -Infinity ? 0 : summary.max;
+
     result.push({
       timestamp: new Date(hourBucket).getTime(),
-      ...stats
+      avgHealth: Math.round(avg * 100) / 100,
+      minHealth: Math.round(min * 100) / 100,
+      maxHealth: Math.round(max * 100) / 100
     });
   }
-  
-  return result.sort((a, b) => a.timestamp - b.timestamp);
+
+  result.sort((a, b) => a.timestamp - b.timestamp);
+  const sorted = result;
+
+  // (performance marks removed)
+
+  return sorted;
 };
 
 const OnlineIcon = () => (
@@ -346,30 +370,59 @@ function OverviewPageContent() {
   const [overviewData, setOverviewData] = useState<OverviewData[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [healthChartData, setHealthChartData] = useState<HealthChartDataPoint[]>([]);
+  const [avgFetchData, setAvgFetchData] = useState<HourlyAvgFetchHealth | null>(null);
+  const [mountCharts, setMountCharts] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('24h');
   const [selectedHealthMetrics, setSelectedHealthMetrics] = useState<Set<HealthMetric>>(new Set(['average']));
 
-  const fetchChartData = async (period: TimePeriod) => {
+  // Helper to schedule non-urgent work during idle or as a macrotask fallback
+  const scheduleIdle = (cb: () => void) => {
+    if (globalThis.window === undefined) {
+      setTimeout(cb, 0);
+      return;
+    }
+    const win = globalThis.window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (win.requestIdleCallback) {
+      try { win.requestIdleCallback(cb, { timeout: 500 }); return; } catch { }
+    }
+    setTimeout(cb, 0);
+  };
+
+  const fetchChartData = useCallback(async (period: TimePeriod) => {
     try {
       const onlineData = period === '24h' 
         ? await getOnlineData24h()
         : await getOnlineData7d();
-      
-      const processedChartData = processOnlineData(onlineData);
-      const processedHealthData = processHealthData(onlineData);
-      
-      setChartData(processedChartData);
-      setHealthChartData(processedHealthData);
+      // Defer the CPU work (processing and state updates) to an idle callback or next macrotask
+      scheduleIdle(() => {
+        try {
+          const processedChartData = processOnlineData(onlineData);
+          const processedHealthData = processHealthData(onlineData);
+
+          // Update state from the deferred task
+          setChartData(processedChartData);
+          setHealthChartData(processedHealthData);
+        } catch (e) {
+          console.error('Deferred processing failed', e);
+        }
+      });
     } catch (err) {
       console.error(`Error fetching ${period} data:`, err);
       throw err;
+    } finally {
+      // (performance marks removed)
     }
-  };
+  }, [/* scheduleIdle is stable per render here; no deps needed because scheduleIdle is defined inline but safe */]);
 
   useEffect(() => {
     const fetchData = async () => {
+      // (performance marks removed)
+
       try {
         setLoading(true);
         setError(null);
@@ -379,16 +432,36 @@ function OverviewPageContent() {
           ? getOverviewData24h()
           : getOverviewData7d();
         
-        const [overview] = await Promise.all([
-          overviewPromise,
-          fetchChartData(timePeriod)
-        ]);
-        
+        // Await overview metadata quickly and start heavy chart fetch in background
+        const overview = await overviewPromise;
+        // Start fetching chart data in background (do not await) so overview can render fast
+        fetchChartData(timePeriod).catch(err => console.error('fetchChartData error', err));
+
+        // Defer avg-fetch health network call to idle time so it doesn't block the main fetchData duration
+        scheduleIdle(async () => {
+          try {
+            const avgResp = timePeriod === '7d'
+              ? await fetchHourlyAvgFetchHealth7d()
+              : await fetchHourlyAvgFetchHealth();
+
+            if (Array.isArray(avgResp)) {
+              setAvgFetchData(avgResp[0] ?? null);
+            } else {
+              setAvgFetchData(avgResp ?? null);
+            }
+          } catch (e) {
+            console.error('Failed to fetch avg fetch health', e);
+            setAvgFetchData(null);
+          }
+        });
+
         setOverviewData(overview);
       } catch (err) {
         console.error('Error fetching overview data:', err);
         setError('Failed to load overview data');
       } finally {
+        // (performance marks removed)
+
         setLoading(false);
       }
     };
@@ -406,7 +479,23 @@ function OverviewPageContent() {
     return () => {
       clearInterval(refreshInterval);
     };
-  }, [timePeriod]);
+  }, [timePeriod, fetchChartData]);
+
+  // Separate effect: defer heavy chart mounting until the browser is idle to improve first contentful paint
+  useEffect(() => {
+    if (globalThis.window === undefined) return;
+    const win = globalThis.window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (win.requestIdleCallback) {
+      const id = win.requestIdleCallback(() => setMountCharts(true), { timeout: 500 });
+      return () => { if (win.cancelIdleCallback) win.cancelIdleCallback(id); };
+    } else {
+      const id = globalThis.window.setTimeout(() => setMountCharts(true), 150);
+      return () => clearTimeout(id);
+    }
+  }, []);
 
   const handleTimePeriodChange = async (newPeriod: TimePeriod) => {
     if (newPeriod === timePeriod) return;
@@ -447,40 +536,62 @@ function OverviewPageContent() {
   };
 
   // Chart configuration
-  const chartSeries = [
-    {
-      name: 'Online',
-      data: chartData.map(point => ({ x: point.timestamp, y: point.online }))
-    },
-    {
-      name: 'Offline', 
-      data: chartData.map(point => ({ x: point.timestamp, y: point.offline }))
-    }
-  ];
+  const chartSeries = useMemo(() => {
 
-  // Health chart configuration
-  const healthChartSeries = [];
-  
-  if (selectedHealthMetrics.has('average')) {
-    healthChartSeries.push({
-      name: 'Average',
-      data: healthChartData.map(point => ({ x: point.timestamp, y: point.avgHealth }))
-    });
-  }
-  
-  if (selectedHealthMetrics.has('min')) {
-    healthChartSeries.push({
-      name: 'Minimum',
-      data: healthChartData.map(point => ({ x: point.timestamp, y: point.minHealth }))
-    });
-  }
-  
-  if (selectedHealthMetrics.has('max')) {
-    healthChartSeries.push({
-      name: 'Maximum',
-      data: healthChartData.map(point => ({ x: point.timestamp, y: point.maxHealth }))
-    });
-  }
+    const series = [
+      {
+        name: 'Online',
+        data: chartData.map(point => ({ x: point.timestamp, y: point.online }))
+      },
+      {
+        name: 'Offline', 
+        data: chartData.map(point => ({ x: point.timestamp, y: point.offline }))
+      }
+    ];
+
+    // (performance marks removed)
+
+    return series;
+  }, [chartData]);
+
+  // Health chart configuration (memoized)
+  const healthChartSeries = useMemo(() => {
+    // (performance marks removed)
+    const series: { name: string; data: { x: number; y: number }[] }[] = [];
+    if (selectedHealthMetrics.has('average')) {
+      series.push({ name: 'Average', data: healthChartData.map(point => ({ x: point.timestamp, y: point.avgHealth })) });
+    }
+    if (selectedHealthMetrics.has('min')) {
+      series.push({ name: 'Minimum', data: healthChartData.map(point => ({ x: point.timestamp, y: point.minHealth })) });
+    }
+    if (selectedHealthMetrics.has('max')) {
+      series.push({ name: 'Maximum', data: healthChartData.map(point => ({ x: point.timestamp, y: point.maxHealth })) });
+    }
+    // (performance marks removed)
+
+    return series;
+  }, [healthChartData, selectedHealthMetrics]);
+
+  // Avg Fetch Health series (from helper)
+  const avgFetchSeries = useMemo(() => {
+    // (performance marks removed)
+
+    if (!avgFetchData || !Array.isArray(avgFetchData.hourly_avg_fetch_health_array) || !Array.isArray(avgFetchData.hour_bucket_local)) {
+      // (performance marks removed)
+      return [];
+    }
+
+    const arr = avgFetchData.hourly_avg_fetch_health_array;
+    const buckets = avgFetchData.hour_bucket_local;
+    const min = Math.min(arr.length, buckets.length);
+    const series = [{ name: 'Connection Health', data: arr.slice(0, min).map((v, i) => ({ x: new Date(buckets[i]).getTime(), y: Number.isFinite(v) ? v : 0 })) }];
+
+    // (performance marks removed)
+
+    return series;
+  }, [avgFetchData]);
+
+  // Note: avgFetchChartOptions is defined after healthChartOptions below
 
   const chartOptions = {
     chart: {
@@ -490,11 +601,12 @@ function OverviewPageContent() {
       zoom: { enabled: false },
       toolbar: { show: false },
       animations: {
-        enabled: true,
+        enabled: false,
         easing: 'easeinout' as const,
-        speed: 800,
+        speed: 0,
       }
     },
+    markers: { size: 0 },
     colors: ['#4ADE80', '#F87171'], // Light green-400 for online, red-400 for offline
     fill: {
       opacity: 1
@@ -639,9 +751,9 @@ function OverviewPageContent() {
       zoom: { enabled: false },
       toolbar: { show: false },
       animations: {
-        enabled: true,
+        enabled: false,
         easing: 'easeinout' as const,
-        speed: 800,
+        speed: 0,
       }
     },
     colors: ['#8B5CF6', '#EF4444', '#10B981'], // Purple for average, red for min, green for max
@@ -653,6 +765,7 @@ function OverviewPageContent() {
       width: 2,
       curve: 'smooth' as const
     },
+    markers: { size: 0 },
     grid: {
       borderColor: '#e5e7eb',
       strokeDashArray: 0,
@@ -755,13 +868,56 @@ function OverviewPageContent() {
     dataLabels: { enabled: false }
   };
 
+  // Avg Fetch chart options reuse the health chart styling but with a different color
+  const avgFetchChartOptions = {
+    ...healthChartOptions,
+    colors: ['#F59E0B'],
+    yaxis: {
+      min: 0,
+      max: 100,
+      labels: {
+        style: { colors: '#6B7280', fontSize: '12px' },
+        formatter: (value: number) => `${Math.round(value)}%`
+      }
+  },
+  tooltip: {
+    theme: 'light' as const,
+    shared: true,
+    intersect: false,
+      marker: { show: false },
+      x: { format: 'MMM dd HH:mm' },
+      style: { fontSize: '12px', fontFamily: 'inherit' },
+      custom: function({ series, seriesIndex, dataPointIndex, w }: TooltipParams) {
+        // Build tooltip using the same structure as Data Health tooltip but show only Connection
+        const date = new Date(w.globals.seriesX[seriesIndex][dataPointIndex]);
+        const maybeValue = series?.[seriesIndex]?.[dataPointIndex];
+        const value = maybeValue ?? 0;
+
+        return `
+          <div class="bg-white border border-gray-200 rounded-lg shadow-lg p-3" style="font-family: inherit;">
+            <div class="text-xs mb-2" style="color: #6B7280;">
+              ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </div>
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full" style="background-color: #F59E0B;"></div>
+                <span class="text-sm" style="color: #6B7280;">Connection: ${Number(value).toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+  };
+
+
   // Icons for stats cards
 
   return (
-    <div className="h-full bg-gray-50 p-6">
+    <div className="h-full bg-gray-50 pt-4">
       <div className="max-w-5xl mx-auto">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Station Overview</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Network Overview</h1>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-sm text-gray-500">Overview data for the last</span>
             <div className="relative">
@@ -833,14 +989,41 @@ function OverviewPageContent() {
                 {/* Online Chart */}
                 <div className="bg-white rounded-lg shadow p-6 mb-8">
                   <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900">Station Online Status</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">Station Online Count</h2>
                   </div>
-                  <Chart
-                    options={chartOptions}
-                    series={chartSeries}
-                    type="bar"
-                    height={300}
-                  />
+                  {mountCharts ? (
+                    <Chart
+                      options={chartOptions}
+                      series={chartSeries}
+                      type="bar"
+                      height={300}
+                    />
+                  ) : (
+                    <div className="h-72 flex items-center justify-center text-gray-500">Loading chart...</div>
+                  )}
+                </div>
+
+                {/* Avg Fetch Health Chart */}
+                <div className="bg-white rounded-lg shadow p-6 mb-8">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900">Connection Health</h2>
+                  </div>
+                  {(() => {
+                    if (!mountCharts) {
+                      return <div className="h-72 flex items-center justify-center text-gray-500">Loading chart...</div>;
+                    }
+                    if (avgFetchSeries.length === 0) {
+                      return <div className="h-72 flex items-center justify-center text-gray-500">No connection data</div>;
+                    }
+                    return (
+                      <Chart
+                        options={avgFetchChartOptions}
+                        series={avgFetchSeries}
+                        type="area"
+                        height={300}
+                      />
+                    );
+                  })()}
                 </div>
 
                 {/* Health Chart */}
@@ -867,12 +1050,16 @@ function OverviewPageContent() {
                       </div>
                     </div>
                   </div>
-                  <Chart
-                    options={healthChartOptions}
-                    series={healthChartSeries}
-                    type="area"
-                    height={300}
-                  />
+                  {mountCharts ? (
+                    <Chart
+                      options={healthChartOptions}
+                      series={healthChartSeries}
+                      type="area"
+                      height={300}
+                    />
+                  ) : (
+                    <div className="h-72 flex items-center justify-center text-gray-500">Loading chart...</div>
+                  )}
                 </div>
               </>
             );

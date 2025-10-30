@@ -3,7 +3,6 @@
 import React, { useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import type { Station, StationHourlyData } from '@/types/station';
-import TimelineCell from '@/components/TimelineCell';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -35,6 +34,8 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
       : undefined;
 
   // Build ApexCharts series for health and online (use timestamps as x)
+  
+
   const healthSeries = useMemo(() => {
     if (!Array.isArray(healthChartData) || !timestamps) return [];
     return [
@@ -44,6 +45,8 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
       }
     ];
   }, [healthChartData, timestamps]);
+
+  
 
   const onlineSeries = useMemo(() => {
     if (!timestamps) return [];
@@ -92,7 +95,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
     { label: 'Modem HTTPS', value: station.modem_https_port ? station.ip + ':' + station.modem_https_port : 'N/A' },
     { label: 'Datalogger Pakbus', value: station.datalogger_pakbus_port ? station.ip + ':' + station.datalogger_pakbus_port : 'N/A' },
     { label: 'Datalogger HTTP', value: station.datalogger_http_port ? station.ip + ':' + station.datalogger_http_port : 'N/A' },
-    { label: 'SMS Number', value: station.sms_number },
+    { label: 'SMS Number', value: station.sms_number ? '+' + station.sms_number : 'N/A' },
     { label: 'Collect Enabled', value: station.collect_enabled ? 'Yes' : 'No' },
   ];
 
@@ -120,16 +123,13 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
             boxShadow: '0 0 8px rgba(0,0,0,0.05)',
           }}
         >
-          {Array.isArray(onlineSeries) && onlineSeries.length > 0 ? (
-            <Chart options={{ ...sharedChartOptions, colors: ['#10B981'] }} series={onlineSeries} type="area" height={220} />
-          ) : (
-            <TimelineCell value={onlineChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
-          )}
+          <Chart options={{ ...sharedChartOptions, colors: ['#10B981'] }} series={onlineSeries} type="area" height={220} />
           <div className="text-gray-500 text-center mt-2 text-sm">
             Station Online Status (Last 24 Hours)
           </div>
         </div>
 
+        
         {/* Health Status Chart */}
         <div
           style={{
@@ -143,11 +143,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
             boxShadow: '0 0 8px rgba(0,0,0,0.05)',
           }}
         >
-          {Array.isArray(healthSeries) && healthSeries.length > 0 ? (
-            <Chart options={sharedChartOptions} series={healthSeries} type="area" height={220} />
-          ) : (
-            <TimelineCell value={healthChartData} timestamps={timestamps} BarWidth={20} maxBarHeight={80}/>
-          )}
+          <Chart options={sharedChartOptions} series={healthSeries} type="area" height={220} />
           <div className="text-gray-500 text-center mt-2 text-sm">
             Station Health (Last 24 Hours)
           </div>
