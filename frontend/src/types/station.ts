@@ -7,11 +7,11 @@ export interface Station {
   latitude?: number
   longitude?: number
   altitude?: number
-  ip: string
-  modem_http_port: number
-  modem_https_port: number
-  datalogger_pakbus_port: number
-  datalogger_http_port: number
+  county?: string
+  ip_modem_http: string
+  ip_modem_https: string
+  ip_datalogger_pakbus: string
+  ip_datalogger_http: string
   sms_number?: string
   collect_enabled: boolean
   settings?: JSON
@@ -35,8 +35,8 @@ export interface AvgStatus {
   station_id: number
   avg_data_health_24h: number
   avg_data_health_7d: number
-  avg_fetch_health_7d: number
-  avg_fetch_health_24h: number
+  avg_network_health_7d: number
+  avg_network_health_24h: number
 }
 export interface HourStatus {
   station_id: number
@@ -45,20 +45,23 @@ export interface HourStatus {
 }
 
 export interface StationHourlyData {
-  station_id: number
-  hourly_online_array: number[]
-  hourly_health_array: number[]
+  _station_id: number
+  hourly_network_health: number[]
+  hourly_data_health: number[]
   hour_bucket_local: string[]
 }
 
-export interface HourlyAvgFetchHealth {
-  hourly_avg_fetch_health_array: number[]
-  hour_bucket_local: string[]
+// New shape returned by the DB RPCs get_hourly_avg_health_24h / get_hourly_avg_health_7d
+export interface HourlyAvgHealth {
+  hourly_data_health: number[]
+  hourly_network_health: number[]
+  hourly_avg_online_count: number[]
+  hour_labels: string[]
 }
 
 export interface CollectorDataKeyValue {
   station_id: number
-  collection_id: number
+  table_name: number
   key: string
   value: string
   station_timestamp: string
@@ -77,6 +80,7 @@ export interface AdvancedStationData {
   altitude?: number
   ip: string
   sms_number?: string
+  county?: string
   
   // Status data (mostly hidden by default)
   avg_fetch_health_7d: number
@@ -107,7 +111,7 @@ export interface SmsMessage {
   user_id?: string | null
   number: string
   message: string
-  status: number, // OUTBOX by default
+  status: string // OUTBOX by default
   time: string
   unread: boolean
   deleted: boolean

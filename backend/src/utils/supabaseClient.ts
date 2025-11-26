@@ -8,12 +8,14 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
-    persistSession: false, // Don't persist session on backend
-    autoRefreshToken: false, // Don't auto-refresh tokens on backend
+    persistSession: false,
+    autoRefreshToken: false,
   },
   global: {
     headers: {
-      'cache-control': 'no-cache', // Prevent caching issues
+      'Authorization': `Bearer ${supabaseServiceKey}`,
+      'apikey': supabaseServiceKey,
+      'cache-control': 'no-cache',
     },
   },
 });
@@ -27,6 +29,8 @@ export function createFreshSupabaseClient() {
     },
     global: {
       headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'apikey': supabaseServiceKey,
         'cache-control': 'no-cache',
       },
     },

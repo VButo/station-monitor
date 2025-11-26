@@ -5,7 +5,7 @@ import StationTable, { RowData } from '@/components/StationTable'
 import StationList, { StationListData } from '@/components/StationList'
 import AdvancedTable from '@/components/AdvancedTable'
 import ProtectedRoute from '@/components/ProtectedRoute'
-import type { Station } from '@/types/station'
+import type { Station, StationHourlyData } from '@/types/station'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 function StationsPageContent() {
@@ -42,24 +42,32 @@ function StationsPageContent() {
         // Fetch all required data
         const stationsData = await fetchStations()
         const hourlyData = await fetchStationStatus()
+        const transformedHourlyData = []
+        for (const row of hourlyData) {
+          const station_id = row._station_id ?? row['_station_id'];
+          // keep original fields but ensure station_id exists for callers that expect it
+          transformedHourlyData.push({ ...row, station_id } as StationHourlyData & { station_id: number });
+        }
         const avgStatusData = await getAverageStatus()
-        
+        console.log("stationsData", stationsData);
+        console.log("hourlyData", transformedHourlyData);
+        console.log("avgStatusData", avgStatusData);
         setStations(stationsData)
         
         // Prepare table row data using loops (no nested callbacks)
         const tableData: RowData[] = []
         for (const station of stationsData) {
-          const stationHealth = findByStationId(hourlyData, station.id)
+          const stationHealth = findByStationId(transformedHourlyData, station.id)
           const avgData = findByStationId(avgStatusData, station.id)
           tableData.push({
             id: station.id,
             label_id: station.label_id,
             label_text: station.label_name,
             label_type: station.label_type,
-            status: stationHealth?.hourly_avg_array?.length === 24 ? stationHealth.hourly_avg_array : ('Error' as const),
+            status: stationHealth?.hourly_network_health?.length === 24 ? stationHealth.hourly_network_health : ('Error' as const),
             timestamps: stationHealth?.hour_bucket_local?.length === 24 ? stationHealth.hour_bucket_local : [],
             avg_data_health_24h: avgData?.avg_data_health_24h || null,
-            avg_fetch_health_24h: avgData?.avg_fetch_health_24h || 0,
+            avg_network_health_24h: avgData?.avg_network_health_24h || 0,
           })
         }
         setTableRowData(tableData)
@@ -71,8 +79,8 @@ function StationsPageContent() {
           listDataArr.push({
             id: station.id,
             label: station.label,
-            ip: station.ip,
-            online: avgData?.avg_fetch_health_24h || 0,
+            ip: (station.ip_datalogger_http.split(':')[0] || '').replace('//', ''),
+            online: avgData?.avg_network_health_24h || 0,
             health: avgData?.avg_data_health_24h || null,
           })
         }

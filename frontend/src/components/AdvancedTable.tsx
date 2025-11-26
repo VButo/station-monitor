@@ -34,7 +34,7 @@ export default function AdvancedTable({
   onRowClick,
   defaultSelectedColumns = [
     'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg',
-    'latitude', 'longitude', 'altitude', 'sms_number'
+    'latitude', 'longitude', 'altitude', /* 'county' intentionally not default-selected */ 'sms_number'
   ],
   showControls = true
 }: AdvancedTableProps) {
@@ -96,22 +96,22 @@ export default function AdvancedTable({
         setLoading(true);
         setError(null);
         const res = await api.get<{
-        stations: AdvancedStationData[], 
-        columnStructure: {
-          public_data: Record<string, string>;
-          status_data: Record<string, string>;
-          measurements_data: Record<string, string>;
-        },
-        metadata: {
-          publicKeys: string[];
-          statusKeys: string[];
-          measurementKeys: string[];
-          totalStations: number;
-          generatedAt: string;
-        }
-      }>('/stations/advanced-table');
-        
-        if (res.data?.stations) {
+          stations: AdvancedStationData[], 
+          columnStructure: {
+            public_data: Record<string, string>;
+            status_data: Record<string, string>;
+            measurements_data: Record<string, string>;
+          },
+          metadata: {
+            publicKeys: string[];
+            statusKeys: string[];
+            measurementKeys: string[];
+            totalStations: number;
+            generatedAt: string;
+          }
+        }>('/stations/advanced-table');
+        console.log("Station data:", res.data.stations)
+        if (res.status === 200) {
           const stations = res.data.stations;
           setStationData(stations);
           
@@ -224,7 +224,7 @@ export default function AdvancedTable({
     
     const totalRows = stationData.length;
     const displayedRowCount = gridApi.getDisplayedRowCount();
-    const gridFilterModel = gridApi.getFilterModel();
+    const gridFilterModel = gridApi.getFilterModel() || {};
     const hasGridFilters = Object.keys(gridFilterModel).length > 0;
     const hasSearchFilter = Boolean(searchTerm.trim());
     const isCurrentlyFiltered = hasGridFilters || hasSearchFilter;
@@ -306,17 +306,17 @@ export default function AdvancedTable({
   const toggleColumnGroup = useCallback((groupName: string, isVisible: boolean) => {
     if (stationData.length === 0) return;
 
-    const publicKeys = Object.keys(columnStructure.public_data);
-    const statusKeys = Object.keys(columnStructure.status_data);
-    const measurementKeys = Object.keys(columnStructure.measurements_data);
-    
+    const publicKeys = Object.keys(columnStructure?.public_data ?? {});
+    const statusKeys = Object.keys(columnStructure?.status_data ?? {});
+    const measurementKeys = Object.keys(columnStructure?.measurements_data ?? {});
+
     let columnsToToggle: string[] = [];
     
     switch (groupName) {
       case 'station':
         // Exclude pinned columns (label_id, label_name, label_type) - they're pinned on desktop but configurable on mobile
         columnsToToggle = [
-          'label', 'latitude', 'longitude', 'altitude', 
+          'label', 'latitude', 'longitude', 'altitude', 'county', 
           'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
           'online_last_seen', 'data_health_24h_avg', 'data_health_7d_avg'
         ];
@@ -361,7 +361,7 @@ export default function AdvancedTable({
       case 'station':
         // Exclude pinned columns (label_id, label_name, label_type) - they're pinned on desktop but configurable on mobile
         columnsInGroup = [
-          'label', 'latitude', 'longitude', 'altitude', 
+          'label', 'latitude', 'longitude', 'altitude', 'county', 
           'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
           'online_last_seen', 'data_health_24h_avg', 'data_health_7d_avg'
         ];
@@ -413,7 +413,7 @@ export default function AdvancedTable({
   const showAllColumns = useCallback(() => {
     const allColumnIds = new Set([
       // Basic columns
-      'label', 'latitude', 'longitude', 'altitude', 'ip_address', 'sms_number',
+      'label', 'latitude', 'longitude', 'altitude', 'county', 'ip_address', 'sms_number',
       'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 'online_last_seen',
       'data_health_24h_avg', 'data_health_7d_avg',
       // Timestamp columns
@@ -695,6 +695,16 @@ export default function AdvancedTable({
         valueFormatter: params => params.value ? `${params.value}m` : '',
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
+      });
+    }
+
+    if (selected.has('county')) {
+      columns.push({
+        headerName: 'County',
+        field: 'county',
+        minWidth: 140,
+        filter: 'agTextColumnFilter',
+        filterParams: { buttons: ['reset', 'apply'], debounceMs: 300 }
       });
     }
 
@@ -1002,6 +1012,7 @@ export default function AdvancedTable({
                             { id: 'latitude', label: 'Latitude' },
                             { id: 'longitude', label: 'Longitude' },
                             { id: 'altitude', label: 'Altitude' },
+                            { id: 'county', label: 'County' },
                             { id: 'ip_address', label: 'IP Address' },
                             { id: 'sms_number', label: 'SMS Number' },
                             { id: 'online_24h_avg', label: 'Online 24h Avg' },
@@ -1725,6 +1736,7 @@ export default function AdvancedTable({
                     { id: 'latitude', label: 'Latitude' },
                     { id: 'longitude', label: 'Longitude' },
                     { id: 'altitude', label: 'Altitude' },
+                    { id: 'county', label: 'County' },
                     { id: 'ip_address', label: 'IP Address' },
                     { id: 'sms_number', label: 'SMS Number' },
                     { id: 'online_24h_avg', label: 'Online 24h Avg' },

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { fetchStations, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime } from '@/utils/stationHelpers';
+import { fetchStations, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime, getStationTableWithDatetime } from '@/utils/stationHelpers';
 import type { CollectorDataKeyValue, Station } from '@/types/station';
 import PublicTab from '../station/[stationId]/components/PublicTab';
 import StatusTab from '../station/[stationId]/components/StatusTab';
@@ -22,11 +22,10 @@ export default function ReportPage() {
   // Date and time selection state
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD format
   const [selectedTime, setSelectedTime] = useState(() => {
-    // Round current time to nearest 10-minute increment
+    // Set current time to the start of the current hour (full-hour values only)
     const now = new Date();
-    const minutes = Math.round(now.getMinutes() / 10) * 10;
-    now.setMinutes(minutes, 0, 0); // Set to rounded minutes, zero out seconds and milliseconds
-    return now.toTimeString().slice(0, 5); // HH:MM format
+    now.setMinutes(0, 0, 0); // zero out minutes, seconds and milliseconds
+    return now.toTimeString().slice(0, 5); // HH:MM format (minutes will be 00)
   });
 
   // Fetch stations list on mount
@@ -46,12 +45,12 @@ export default function ReportPage() {
       // Convert Croatian time selection to database search time (UTC+1)
       const datetime = convertCroatianTimeToDbSearchTime(selectedDate, selectedTime);
       console.log('Croatian time selected:', `${selectedDate} ${selectedTime}`);
-      console.log('Database search time:', datetime.toISOString());
+      console.log('Database search time:', datetime);
       
       const [publicDataResult, statusDataResult, measurementsDataResult] = await Promise.all([
-        getPublicTableWithDatetime(stationToUse.id, datetime),
-        getStatusTableWithDatetime(stationToUse.id, datetime),
-        getMeasurementsTableWithDatetime(stationToUse.id, datetime),
+        getStationTableWithDatetime(stationToUse.id, 1, datetime),
+        getStationTableWithDatetime(stationToUse.id, 2, datetime),
+        getStationTableWithDatetime(stationToUse.id, 3, datetime),
       ]);
 
       setPublicData(publicDataResult);
@@ -302,11 +301,8 @@ export default function ReportPage() {
                 width: '100%',
               }}
             >
-              {Array.from({ length: 144 }, (_, i) => {
-                const totalMinutes = i * 10;
-                const hours = Math.floor(totalMinutes / 60);
-                const minutes = totalMinutes % 60;
-                const timeValue = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+              {Array.from({ length: 24 }, (_, h) => {
+                const timeValue = `${h.toString().padStart(2, '0')}:00`;
                 return (
                   <option key={timeValue} value={timeValue}>
                     {timeValue}

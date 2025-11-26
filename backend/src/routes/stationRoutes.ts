@@ -1,18 +1,18 @@
 import { Router } from 'express';
-import { getStations, getStationById, getMeasurementsTable, getPublicTable, getStatusTable, fetchStationStatus, getAverageStatus, getAdvancedStationData, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime, getStationOverviewData, getHourlyAverageFetchHealth, getHourlyAverageFetchHealth7d } from '../controllers/stationController';
+import { getStations, getFieldNames, getStationById, fetchStationStatus, getAverageStatus, getAdvancedStationData, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime, getStationOverviewData, getHourlyAverageFetchHealth, getHourlyAverageFetchHealth7d, getStationsTable, getStationsTableWithDatetime } from '../controllers/stationController';
 
 const router = Router();
 
 router.get('/', getStations);
+router.get('/get-names', getFieldNames)
 router.get('/station-status', fetchStationStatus);
 router.get('/station-overview', getStationOverviewData);
 router.get('/hourly-average-fetch-health', getHourlyAverageFetchHealth);
 router.get('/hourly-average-fetch-health-7d', getHourlyAverageFetchHealth7d);
 router.get('/average-status', getAverageStatus);
 router.get('/advanced-table', getAdvancedStationData);
-router.get('/measurements-table/:id', getMeasurementsTable);
-router.get('/public-table/:id', getPublicTable);
-router.get('/status-table/:id', getStatusTable);
+router.get('/stations-table/:id/:tableNameId', getStationsTable);
+router.get('/table-datetime/:id/:tableNameId',  getStationsTableWithDatetime);
 // New datetime-enabled routes - these accept datetime as query parameter
 router.get('/public-table-datetime/:id', getPublicTableWithDatetime);
 router.get('/status-table-datetime/:id', getStatusTableWithDatetime);

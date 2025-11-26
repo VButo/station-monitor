@@ -64,7 +64,6 @@ const server = app.listen(PORT, HOST, () => {
   // Initialize socket.io server (async)
   ;(async () => {
     try {
-      const allowedOrigin = [process.env.SITE_URL || 'http://localhost:3000']
       await initSocket(server as unknown as import('http').Server, allowedOrigin)
       console.log('Socket.io initialized')
     } catch (e) {

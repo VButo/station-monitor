@@ -15,7 +15,7 @@ export async function smsRecieved(number: string, message: string) {
       user_id: null,
       number,
       message,
-      status: 1, // INBOX
+      status: 'INBOX', // INBOX
       time: new Date().toISOString(),
       unread: true,
       deleted: false,
@@ -49,7 +49,24 @@ export async function insertOutgoingSms(row: SmsRow) {
     user_id: row.user_id ?? null,
     number: row.number,
     message: row.message,
-    status: row.status ?? 2, // OUTBOX by default
+    // The database stores sms_status as an enum of string labels. Convert
+    // numeric codes to their enum names when writing to avoid Postgres errors
+    // (22P02 invalid input value for enum).
+    status: (function convertStatus(s?: number | undefined) {
+      const code = s ?? 2;
+      // mapping: 1=INBOX, 2=OUTBOX, 3=SENT, 4=UNSENT
+      switch (Number(code)) {
+        case 1:
+          return 'INBOX';
+        case 3:
+          return 'SENT';
+        case 4:
+          return 'UNSENT';
+        case 2:
+        default:
+          return 'OUTBOX';
+      }
+    })(row.status),
     time: row.time ?? new Date().toISOString(),
     unread: row.unread ?? false,
     deleted: row.deleted ?? false,
@@ -61,7 +78,21 @@ export async function insertOutgoingSms(row: SmsRow) {
 }
 
 export async function updateSmsStatus(id: number, status: number) {
-  const { data, error } = await supabase.from('sms_messages').update({ status }).eq('id', id).select().single();
+  // Convert numeric status code to enum label before updating
+  const statusLabel = ((): string => {
+    switch (Number(status)) {
+      case 1:
+        return 'INBOX';
+      case 3:
+        return 'SENT';
+      case 4:
+        return 'UNSENT';
+      case 2:
+      default:
+        return 'OUTBOX';
+    }
+  })();
+  const { data, error } = await supabase.from('sms_messages').update({ status: statusLabel }).eq('id', id).select().single();
   if (error) throw error;
   return data;
 }

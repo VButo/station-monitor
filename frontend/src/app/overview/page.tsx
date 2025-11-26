@@ -3,8 +3,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute'
 import dynamic from 'next/dynamic';
 import { getOverviewData24h, getOverviewData7d, getOnlineData24h, getOnlineData7d } from '@/utils/api';
-import { fetchHourlyAvgFetchHealth, fetchHourlyAvgFetchHealth7d } from '@/utils/stationHelpers';
-import type { HourlyAvgFetchHealth } from '@/types/station';
+import type { OnlineData } from '@/utils/api';
+import type { HourlyAvgHealth } from '@/types/station';
 
 // Dynamically import ApexCharts to avoid SSR issues
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -12,24 +12,12 @@ const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 // Types for overview data
 interface OverviewData {
   station_id: number;
-  station_online: boolean;
-  fetch_health: number; // Online%
-  data_health: number;  // Health%
+  online: boolean;
+  network_health: number; // Network connection health %
+  data_health: number;    // Data health %
 }
 
-interface OnlineData24h {
-  station_id: number;
-  hourly_online_array: boolean[];
-  hourly_health_array: number[];
-  hour_bucket_local: string[];
-}
-
-interface OnlineData7d {
-  station_id: number;
-  hourly_online_array: boolean[];
-  hourly_health_array: number[];
-  hour_bucket_local: string[];
-}
+// Use OnlineData from the API types (aggregate shape returned by the DB)
 
 type TimePeriod = '24h' | '7d';
 type HealthMetric = 'average' | 'min' | 'max';
@@ -157,106 +145,41 @@ interface TooltipParams {
   };
 }
 
-// Process online data for the chart (works for both 24h and 7d)
-const processOnlineData = (data: OnlineData24h[] | OnlineData7d[]): ChartDataPoint[] => {
-  // (performance marks removed)
+// Process online data for the chart (uses aggregated arrays returned by the DB)
+const processOnlineData = (data: OnlineData[]): ChartDataPoint[] => {
+  if (!Array.isArray(data) || data.length === 0) return [];
+  const first = data[0] as OnlineData;
+  const values = Array.isArray(first.hourly_avg_online_count) ? first.hourly_avg_online_count : [];
+  const labels = Array.isArray(first.hour_labels) ? first.hour_labels : [];
 
-  // Aggregate all station states by hour using the new data structure
-  const hourlyData = new Map<string, { online: number; offline: number }>();
-
-  for (const station of data) {
-    // Each station has hourly_online_array and hour_bucket_local arrays
-    for (const [index, isOnline] of station.hourly_online_array.entries()) {
-      const hourBucket = station.hour_bucket_local[index];
-      if (!hourBucket) continue; // Skip if no corresponding hour bucket
-
-      if (!hourlyData.has(hourBucket)) {
-        hourlyData.set(hourBucket, { online: 0, offline: 0 });
-      }
-
-      if (isOnline) {
-        hourlyData.get(hourBucket)!.online++;
-      } else {
-        hourlyData.get(hourBucket)!.offline++;
-      }
-    }
-  }
-
-  // Convert to chart format
-  const result = [];
-  for (const [hourBucket, counts] of hourlyData.entries()) {
-    result.push({
-      timestamp: new Date(hourBucket).getTime(),
-      online: counts.online,
-      offline: counts.offline
-    });
+  const minLen = Math.min(values.length, labels.length);
+  const result: ChartDataPoint[] = [];
+  for (let i = 0; i < minLen; i++) {
+    const online = Math.round(Number.isFinite(values[i]) ? values[i] : 0);
+    result.push({ timestamp: new Date(labels[i]).getTime(), online, offline: 0 });
   }
 
   result.sort((a, b) => a.timestamp - b.timestamp);
-  const sorted = result;
-
-  // (performance marks removed)
-
-  return sorted;
+  return result;
 };
 
-// Helper function to aggregate health values by hour (summary statistics to avoid large arrays)
-type HealthSummary = { sum: number; count: number; min: number; max: number };
+// Process health data for the chart using aggregated arrays returned by the DB
+const processHealthData = (data: OnlineData[]): HealthChartDataPoint[] => {
+  if (!Array.isArray(data) || data.length === 0) return [];
+  const first = data[0] as OnlineData;
+  const values = Array.isArray(first.hourly_data_health) ? first.hourly_data_health : [];
+  const mins = Array.isArray(first.hourly_data_health_min) ? first.hourly_data_health_min : [];
+  const maxs = Array.isArray(first.hourly_data_health_max) ? first.hourly_data_health_max : [];
+  const labels = Array.isArray(first.hour_labels) ? first.hour_labels : [];
 
-const createEmptySummary = (): HealthSummary => ({ sum: 0, count: 0, min: Infinity, max: -Infinity });
-
-const getOrCreateSummary = (map: Map<string, HealthSummary>, key: string): HealthSummary => {
-  let summary = map.get(key);
-  if (!summary) {
-    summary = createEmptySummary();
-    map.set(key, summary);
-  }
-  return summary;
-};
-
-const updateSummaryWithValue = (summary: HealthSummary, rawValue: number | undefined | null = 0) => {
-  const value = rawValue ?? 0;
-  summary.sum += value;
-  summary.count += 1;
-  // Preserve previous behavior: treat 0 as "missing" for min/max calculations
-  if (value !== 0) {
-    summary.min = Math.min(summary.min, value);
-    summary.max = Math.max(summary.max, value);
-  }
-};
-
-const aggregateHealthByHour = (data: OnlineData24h[] | OnlineData7d[]): Map<string, { sum: number; count: number; min: number; max: number }> => {
-  const hourlyHealthData = new Map<string, HealthSummary>();
-
-  for (const station of data) {
-    const { hourly_health_array, hour_bucket_local } = station;
-    for (const [index, healthValue] of hourly_health_array.entries()) {
-      const hourBucket = hour_bucket_local[index];
-      if (!hourBucket) continue;
-
-      const bucket = getOrCreateSummary(hourlyHealthData, hourBucket);
-      updateSummaryWithValue(bucket, healthValue);
-    }
-  }
-
-  return hourlyHealthData;
-};
-
-// Note: we replaced the array-based stats computation with summary stats in aggregateHealthByHour
-
-// Process health data for the chart (works for both 24h and 7d)
-const processHealthData = (data: OnlineData24h[] | OnlineData7d[]): HealthChartDataPoint[] => {
-  // (performance marks removed)
-
-  const hourlyHealthData = aggregateHealthByHour(data);
-  const result = [];
-  for (const [hourBucket, summary] of hourlyHealthData.entries()) {
-    const avg = summary.count > 0 ? summary.sum / summary.count : 0;
-    const min = summary.min === Infinity ? 0 : summary.min;
-    const max = summary.max === -Infinity ? 0 : summary.max;
-
+  const minLen = Math.min(values.length, labels.length);
+  const result: HealthChartDataPoint[] = [];
+  for (let i = 0; i < minLen; i++) {
+    const avg = Number.isFinite(values[i]) ? values[i] : 0;
+    const min = Number.isFinite(mins[i]) ? mins[i] : avg;
+    const max = Number.isFinite(maxs[i]) ? maxs[i] : avg;
     result.push({
-      timestamp: new Date(hourBucket).getTime(),
+      timestamp: new Date(labels[i]).getTime(),
       avgHealth: Math.round(avg * 100) / 100,
       minHealth: Math.round(min * 100) / 100,
       maxHealth: Math.round(max * 100) / 100
@@ -264,11 +187,7 @@ const processHealthData = (data: OnlineData24h[] | OnlineData7d[]): HealthChartD
   }
 
   result.sort((a, b) => a.timestamp - b.timestamp);
-  const sorted = result;
-
-  // (performance marks removed)
-
-  return sorted;
+  return result;
 };
 
 const OnlineIcon = () => (
@@ -370,7 +289,7 @@ function OverviewPageContent() {
   const [overviewData, setOverviewData] = useState<OverviewData[]>([]);
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [healthChartData, setHealthChartData] = useState<HealthChartDataPoint[]>([]);
-  const [avgFetchData, setAvgFetchData] = useState<HourlyAvgFetchHealth | null>(null);
+  const [avgFetchData, setAvgFetchData] = useState<HourlyAvgHealth | null>(null);
   const [mountCharts, setMountCharts] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -398,11 +317,62 @@ function OverviewPageContent() {
       const onlineData = period === '24h' 
         ? await getOnlineData24h()
         : await getOnlineData7d();
+      console.log(onlineData);
+      // Log raw onlineData so we can inspect returned shape in the browser console
+      // Paste this output if you want me to inspect the payload
+      // NOTE: This runs in the browser (client-side). Open DevTools Console to view.
+      try {
+        // Use console.info so it's easy to filter
+        console.info('Overview.fetchChartData - onlineData length:', Array.isArray(onlineData) ? onlineData.length : 'not-array');
+        console.info('Overview.fetchChartData - onlineData[0] sample:', (onlineData as unknown as Record<string, unknown>[])[0]);
+      } catch {
+        // swallow logging errors
+      }
       // Defer the CPU work (processing and state updates) to an idle callback or next macrotask
       scheduleIdle(() => {
         try {
           const processedChartData = processOnlineData(onlineData);
           const processedHealthData = processHealthData(onlineData);
+
+          // Attempt to extract aggregated connection health if the backend returned
+          // a single aggregate row with hourly_network_health / hour_labels
+          try {
+            const first = (onlineData as unknown as Record<string, unknown>[])[0] as Record<string, unknown> | undefined;
+            // Log the first row we inspect for aggregated hourly arrays
+            console.info('Overview.fetchChartData - first row for aggregation:', first);
+            if (first && Array.isArray(first['hourly_network_health']) && Array.isArray(first['hour_labels'])) {
+              setAvgFetchData({
+                hourly_data_health: (first['hourly_data_health'] as number[] | undefined) ?? [],
+                hourly_network_health: first['hourly_network_health'] as number[],
+                hourly_avg_online_count: (first['hourly_avg_online_count'] as number[] | undefined) ?? [],
+                hour_labels: first['hour_labels'] as string[]
+              });
+            } else if (first && Array.isArray(first['hourly_avg_online_count']) && Array.isArray(first['hour_labels'])) {
+              // Some DB functions may expose hourly_avg_online_count or hourly_data_health
+              console.info('Overview.fetchChartData - detected alternate aggregated shape on first row');
+              setAvgFetchData({
+                hourly_data_health: (first['hourly_data_health'] as number[] | undefined) ?? [],
+                hourly_network_health: (first['hourly_network_health'] as number[] | undefined) ?? [],
+                hourly_avg_online_count: (first['hourly_avg_online_count'] as number[] | undefined) ?? [],
+                hour_labels: first['hour_labels'] as string[]
+              });
+            } else {
+              // No aggregated shape detected — clear avgFetchData
+              console.info('Overview.fetchChartData - no aggregated hourly arrays detected on first row');
+              setAvgFetchData(null);
+            }
+          } catch (e) {
+            console.warn('Could not derive aggregated connection health from online-data response', e);
+            setAvgFetchData(null);
+          }
+
+          // Log processed chart/health data for debugging
+          try {
+            console.info('Overview.fetchChartData - processedChartData sample (first 5):', processedChartData.slice(0, 5));
+            console.info('Overview.fetchChartData - processedHealthData sample (first 5):', processedHealthData.slice(0, 5));
+          } catch {
+            // ignore
+          }
 
           // Update state from the deferred task
           setChartData(processedChartData);
@@ -431,29 +401,18 @@ function OverviewPageContent() {
         const overviewPromise = timePeriod === '24h' 
           ? getOverviewData24h()
           : getOverviewData7d();
-        
         // Await overview metadata quickly and start heavy chart fetch in background
         const overview = await overviewPromise;
+        console.log("overview", overview);
         // Start fetching chart data in background (do not await) so overview can render fast
         fetchChartData(timePeriod).catch(err => console.error('fetchChartData error', err));
 
-        // Defer avg-fetch health network call to idle time so it doesn't block the main fetchData duration
-        scheduleIdle(async () => {
-          try {
-            const avgResp = timePeriod === '7d'
-              ? await fetchHourlyAvgFetchHealth7d()
-              : await fetchHourlyAvgFetchHealth();
-
-            if (Array.isArray(avgResp)) {
-              setAvgFetchData(avgResp[0] ?? null);
-            } else {
-              setAvgFetchData(avgResp ?? null);
-            }
-          } catch (e) {
-            console.error('Failed to fetch avg fetch health', e);
-            setAvgFetchData(null);
-          }
-        });
+        // The overview API returns aggregated hourly data at the /online-data-* endpoints.
+        // We'll attempt to extract the aggregated series from the same response used
+        // for charting (getOnlineData24h / getOnlineData7d). If the backend returns
+        // a single-row aggregate (hourly_network_health / hour_labels), we'll use
+        // that directly. Otherwise we leave avgFetchData null and the chart shows
+        // 'No connection data'.
 
         setOverviewData(overview);
       } catch (err) {
@@ -523,21 +482,48 @@ function OverviewPageContent() {
   };
 
   // Calculate stats from overview data
+  const total = overviewData.length;
+  const onlineCount = overviewData.filter(station => station.online).length;
+  const offlineCount = total - onlineCount;
+
+  // Average network and data health (rounded)
+  const avgNetworkHealth = total > 0
+    ? Math.round((overviewData.reduce((sum, station) => sum + (station.network_health ?? 0), 0) / total) * 100) / 100
+    : 0;
+  const avgDataHealth = total > 0
+    ? Math.round((overviewData.reduce((sum, station) => sum + (station.data_health ?? 0), 0) / total) * 100) / 100
+    : 0;
+
   const stats = {
-    online: overviewData.filter(station => station.station_online).length,
-    offline: overviewData.filter(station => !station.station_online).length,
-    total: overviewData.length,
-    onlinePercentage: overviewData.length > 0 
-      ? Math.round((overviewData.filter(station => station.station_online).length / overviewData.length) * 100)
-      : 0,
-    avgHealth: overviewData.length > 0
-      ? Math.round(overviewData.reduce((sum, station) => sum + station.data_health, 0) / overviewData.length)
-      : 0
+    online: onlineCount,
+    offline: offlineCount,
+    total,
+    onlinePercentage: total > 0 ? Math.round((onlineCount / total) * 100) : 0,
+    avgNetworkHealth,
+    avgDataHealth,
+    // Keep avgHealth for backward compatibility in the UI (use network health)
+    avgHealth: Math.round(avgNetworkHealth)
   };
 
   // Chart configuration
   const chartSeries = useMemo(() => {
+    // If the backend returned aggregated hourly averages (avgFetchData), prefer that
+    if (avgFetchData && Array.isArray(avgFetchData.hourly_avg_online_count) && Array.isArray(avgFetchData.hour_labels)) {
+      const values = avgFetchData.hourly_avg_online_count as number[];
+      const labels = avgFetchData.hour_labels as string[];
+      const minLen = Math.min(values.length, labels.length);
+      const totalStations = overviewData.length || 0;
 
+      const onlineSerie = values.slice(0, minLen).map((v, i) => ({ x: new Date(labels[i]).getTime(), y: Number.isFinite(v) ? Math.round(v) : 0 }));
+      const offlineSerie = values.slice(0, minLen).map((v, i) => ({ x: new Date(labels[i]).getTime(), y: Math.max(0, totalStations - Math.round(Number.isFinite(v) ? v : 0)) }));
+
+      return [
+        { name: 'Online', data: onlineSerie },
+        { name: 'Offline', data: offlineSerie }
+      ];
+    }
+
+    // Fallback to per-station aggregation (slower) if aggregated shape isn't available
     const series = [
       {
         name: 'Online',
@@ -549,10 +535,8 @@ function OverviewPageContent() {
       }
     ];
 
-    // (performance marks removed)
-
     return series;
-  }, [chartData]);
+  }, [chartData, avgFetchData, overviewData.length]);
 
   // Health chart configuration (memoized)
   const healthChartSeries = useMemo(() => {
@@ -575,18 +559,17 @@ function OverviewPageContent() {
   // Avg Fetch Health series (from helper)
   const avgFetchSeries = useMemo(() => {
     // (performance marks removed)
-
-    if (!avgFetchData || !Array.isArray(avgFetchData.hourly_avg_fetch_health_array) || !Array.isArray(avgFetchData.hour_bucket_local)) {
-      // (performance marks removed)
+    if (!avgFetchData || !Array.isArray(avgFetchData.hourly_network_health) || !Array.isArray(avgFetchData.hour_labels)) {
       return [];
     }
 
-    const arr = avgFetchData.hourly_avg_fetch_health_array;
-    const buckets = avgFetchData.hour_bucket_local;
-    const min = Math.min(arr.length, buckets.length);
-    const series = [{ name: 'Connection Health', data: arr.slice(0, min).map((v, i) => ({ x: new Date(buckets[i]).getTime(), y: Number.isFinite(v) ? v : 0 })) }];
-
-    // (performance marks removed)
+    const values = avgFetchData.hourly_network_health as number[];
+    const labels = avgFetchData.hour_labels as string[];
+    const min = Math.min(values.length, labels.length);
+    const series = [{
+      name: 'Connection Health',
+      data: values.slice(0, min).map((v: number, i: number) => ({ x: new Date(labels[i]).getTime(), y: Number.isFinite(v) ? v : 0 }))
+    }];
 
     return series;
   }, [avgFetchData]);

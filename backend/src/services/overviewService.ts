@@ -1,4 +1,23 @@
 import { supabase } from '../utils/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
+
+// Create a dedicated client for RPC calls with explicit service role
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const rpcClient = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+  global: {
+    headers: {
+      'Authorization': `Bearer ${supabaseServiceKey}`,
+      'apikey': supabaseServiceKey,
+      'cache-control': 'no-cache',
+    },
+  },
+});
 
 export interface OverviewData {
   station_id: number;
@@ -7,23 +26,19 @@ export interface OverviewData {
   data_health: number;  // Health%
 }
 
-export interface OnlineData24h {
-  station_id: number;
-  hourly_online_array: boolean[];
-  hourly_health_array: number[];
-  hour_bucket_local: string[];
+export interface OnlineData {
+  hourly_data_health: number[];
+  hourly_data_health_min: number[];
+  hourly_data_health_max: number[];
+  hourly_network_health: number[];
+  hourly_avg_online_count: number[];
+  hour_labels: string[];
 }
 
-export interface OnlineData7d {
-  station_id: number;
-  hourly_online_array: boolean[];
-  hourly_health_array: number[];
-  hour_bucket_local: string[];
-}
 
 export const getOverviewData24h = async (): Promise<OverviewData[]> => {
   try {
-    const { data, error } = await supabase.rpc('get_overview_data_24h');
+    const { data, error } = await rpcClient.rpc('get_station_overview_24h');
 
     if (error) {
       console.error('Error fetching overview data:', error);
@@ -39,7 +54,7 @@ export const getOverviewData24h = async (): Promise<OverviewData[]> => {
 
 export const getOverviewData7d = async (): Promise<OverviewData[]> => {
   try {
-    const { data, error } = await supabase.rpc('get_overview_data_7d');
+    const { data, error } = await rpcClient.rpc('get_station_overview_7d');
 
     if (error) {
       console.error('Error fetching overview data:', error);
@@ -53,9 +68,9 @@ export const getOverviewData7d = async (): Promise<OverviewData[]> => {
   }
 };
 
-export const getOnlineData24h = async (): Promise<OnlineData24h[]> => {
+export const getOnlineData24h = async (): Promise<OnlineData[]> => {
   try {
-    const { data, error } = await supabase.rpc('get_online_data_24h');
+    const { data, error } = await rpcClient.rpc('get_hourly_avg_health_24h');
 
     if (error) {
       console.error('Error fetching 24h online data:', error);
@@ -69,9 +84,9 @@ export const getOnlineData24h = async (): Promise<OnlineData24h[]> => {
   }
 };
 
-export const getOnlineData7d = async (): Promise<OnlineData7d[]> => {
+export const getOnlineData7d = async (): Promise<OnlineData[]> => {
   try {
-    const { data, error } = await supabase.rpc('get_online_data_7d');
+    const { data, error } = await rpcClient.rpc('get_hourly_avg_health_7d');
 
     if (error) {
       console.error('Error fetching 7d online data:', error);

@@ -1,5 +1,6 @@
 import { supabase } from '../utils/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
+import { getFieldNamesCached } from './fieldService';
 
 // Create a dedicated client for RPC calls with explicit service role
 const supabaseUrl = process.env.SUPABASE_URL!;
@@ -36,70 +37,117 @@ async function testDatabaseConnection() {
 }
 
 export async function getAverageStatus() {
-  const { data, error } = await supabase.from('station_health_summary').select('*');
+  const { data, error } = await rpcClient.from('station_health_summary').select('*');
   if (error) throw error;
   return data;
 }
 
 export async function fetchStationStatus() {
-  const { data, error } = await supabase.rpc('get_station_hourly_health');
+  const { data, error } = await rpcClient.rpc('get_station_hourly_health');
   if (error) throw error;
   return data;
 }
 
-export async function getStatusTable(id: number) {
+// Helper: map RPC key-value rows to human-friendly keys using field_names
+export function mapStationRows(data: any[], fieldNames: any[]) {
+  // Build lookup map: field_id -> field metadata
+  const fieldMapById = new Map<number, any>(
+    fieldNames.map((fn: any) => [Number(fn.id), fn])
+  );
+
+  // Helper to remove outer quotes safely
+  const stripOuterQuotes = (val: any) => {
+    if (typeof val !== 'string') return val;
+    if (val.length >= 2 && val.startsWith('"') && val.endsWith('"')) {
+      return val.slice(1, -1);
+    }
+    return val;
+  };
+
+  // Map each row and clean values
+  return (data || []).map((item: any) => {
+    const fieldId = Number(item.field_id);
+    const fieldMeta = fieldMapById.get(fieldId);
+
+    const cleanValue = stripOuterQuotes(item.value);
+
+    if (fieldMeta) {
+      return {
+        station_id: item.station_id,
+        table_name: item.table_name_id,
+        key: fieldMeta.name,
+        value: cleanValue,
+        station_timestamp: item.station_timestamp,
+      };
+    }
+
+    return {
+      ...item,
+      value: cleanValue,
+      key_id: fieldId,
+    };
+  });
+}
+
+export async function getStationTable(id: number, tableNameId: number) {
   try {
-    console.log(`Attempting to fetch status table for station ${id}`);
-    const { data, error } = await rpcClient.rpc('get_collector_data_kv_status', { _station_id: id });
-    
+    const { data, error } = await rpcClient.rpc('get_station_data_kv', {
+      _station_id: id,
+      _table_name_id: tableNameId
+    });
+
+    const fieldNames = await getFieldNamesCached();
+
     if (error) {
-      console.error(`Error fetching status table for station ${id}:`, error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error(`Error fetching table (ID: ${tableNameId}) for station ${id}:`, error);
       throw error;
     }
-    
-    console.log(`Status table for station ${id}: ${data?.length || 0} records`);
-    return data || [];
+
+    if (!data || !fieldNames) return [];
+
+    // Reuse mapping helper to map rows -> friendly keys
+    return mapStationRows(data, fieldNames);
+
   } catch (err) {
-    console.error(`Failed to fetch status table for station ${id}:`, err);
+    console.error(`Failed to fetch table (ID: ${tableNameId}) for station ${id}:`, err);
     return [];
   }
 }
 
-export async function getPublicTable(id: number) {
-  try {
-    console.log(`Attempting to fetch public table for station ${id}`);
-    const { data, error } = await rpcClient.rpc('get_collector_data_kv_public', { _station_id: id });
-    
-    if (error) {
-      console.error(`Error fetching public table for station ${id}:`, error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      throw error;
-    }
-    
-    console.log(`Public table for station ${id}: ${data?.length || 0} records`);
-    return data || [];
-  } catch (err) {
-    console.error(`Failed to fetch public table for station ${id}:`, err);
-    return [];
-  }
-}
 
-export async function getMeasurementsTable(id: number) {
+export async function getStationTableWithDatetime(id:number, tableNameId:number, datetime:Date){
   try {
-    console.log(`Attempting to fetch measurements table for station ${id}`);
-    const { data, error } = await rpcClient.rpc('get_collector_data_kv_measurements', { _station_id: id });
+    console.log(`Attempting to fetch table (ID: ${tableNameId}) for station ${id} at ${datetime.toISOString()}`);
+    const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
     
+    const { data, error } = await rpcClient.rpc('get_station_data_kv_by_time', { 
+      _station_id: id, 
+      _table_name_id: tableNameId,
+      _start_time: dateTime.toISOString(),
+      _end_time: datetime.toISOString()
+    });
+
     if (error) {
-      console.error(`Error fetching measurements table for station ${id}:`, error);
+      console.error(`Error fetching table (ID: ${tableNameId}) for station ${id} at start date:${dateTime.toISOString()} to end:${datetime.toISOString()}:`, error);
       console.error('Error details:', JSON.stringify(error, null, 2));
       throw error;
     }
+
+    console.log(`Fetched table (ID: ${tableNameId}) for station ${id} at start date:${dateTime.toISOString()} to end:${datetime.toISOString()}: ${data?.length || 0} records`);
     
-    console.log(`Measurements table for station ${id}: ${data?.length || 0} records`);
+    // If we have field name metadata, map rows to friendly keys
+    try {
+      const fieldNames = await getFieldNamesCached();
+      if (fieldNames && Array.isArray(fieldNames) && fieldNames.length > 0) {
+        return mapStationRows(data ?? [], fieldNames);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch field names for mapping in getStationTableWithDatetime:', e);
+    }
+
     return data || [];
   } catch (err) {
-    console.error(`Failed to fetch measurements table for station ${id}:`, err);
+    console.error(`Failed to fetch table (ID: ${tableNameId}) for station ${id} at ${datetime.toISOString()}:`, err);
     return [];
   }
 }
@@ -181,13 +229,13 @@ export async function getMeasurementsTableWithDatetime(id: number, datetime: Dat
 }
 
 export async function fetchStations() {
-  const { data, error } = await supabase.from('stations').select('*').order('id', { ascending: true });
+  const { data, error } = await rpcClient.from('stations').select('*').order('id', { ascending: true });
   if (error) throw error;
   return data;
 }
 
 export async function fetchStationById(id: number) {
-  const { data, error } = await supabase.from('stations').select('*').eq('id', id).maybeSingle();
+  const { data, error } = await rpcClient.from('stations').select('*').eq('id', id).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -238,9 +286,9 @@ export async function fetchAdvancedStationData() {
       try {
         // Fetch key-value data for each table (parallel for this station only)
         const [publicData, statusData, measurementsData] = await Promise.all([
-          getPublicTable(station.id).catch(() => []),
-          getStatusTable(station.id).catch(() => []),
-          getMeasurementsTable(station.id).catch(() => [])
+          getStationTable(station.id, 1).catch(() => []),
+          getStationTable(station.id, 2).catch(() => []),
+          getStationTable(station.id, 3).catch(() => [])
         ]);
 
         // Debug logging for first station
@@ -257,7 +305,7 @@ export async function fetchAdvancedStationData() {
         }
 
         // Find corresponding status data
-        const hourlyStatus = stationStatuses.find((s: any) => s.station_id === station.id);
+        const hourlyStatus = stationStatuses.find((s: any) => s._station_id === station.id);
         const avgStatus = avgStatuses.find((s: any) => s.station_id === station.id);
 
         return {
@@ -270,13 +318,14 @@ export async function fetchAdvancedStationData() {
           latitude: station.latitude,
           longitude: station.longitude,
           altitude: station.altitude,
+          county: station.county,
           ip: station.ip,
           sms_number: station.sms_number,
 
           // Status data
-          avg_fetch_health_7d: avgStatus?.avg_fetch_health_7d || 0,
-          avg_fetch_health_24h: avgStatus?.avg_fetch_health_24h || 0,
-          hourly_status: hourlyStatus?.hourly_avg_array || [],
+          avg_fetch_health_7d: avgStatus?.avg_network_health_7d || 0,
+          avg_fetch_health_24h: avgStatus?.avg_network_health_24h || 0,
+          hourly_status: hourlyStatus?.hourly_network_health || [],
           hourly_timestamps: hourlyStatus?.hour_bucket_local || [],
           avg_data_health_7d: avgStatus?.avg_data_health_7d || 0,
           avg_data_health_24h: avgStatus?.avg_data_health_24h || 0,
@@ -306,6 +355,7 @@ export async function fetchAdvancedStationData() {
           latitude: station.latitude,
           longitude: station.longitude,
           altitude: station.altitude,
+          county: station.county,
           ip: station.ip,
           sms_number: station.sms_number,
           avg_fetch_health_7d: 0,

@@ -118,9 +118,14 @@ export default function ModemTab(props: Readonly<Props>) {
 
   // Socket.io: connect once and listen for realtime events
   useEffect(() => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || ''
-    if (!apiBase) return
-    const socket = io(apiBase, { withCredentials: true })
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || ''
+  if (!apiBase) return
+  // If NEXT_PUBLIC_API_URL includes an API path (e.g. '/api'), remove it
+  // because socket.io is served at the root '/socket.io' path on the server.
+  const socketBase = apiBase.replace(/\/api\/?$/, '')
+  console.log('socket apiBase=', apiBase, '-> socketBase=', socketBase);
+  console.log('socket options:', { withCredentials: true });
+  const socket = io(socketBase, { withCredentials: true })
     socketRef.current = socket
 
     socket.on('connect', () => {
@@ -133,7 +138,7 @@ export default function ModemTab(props: Readonly<Props>) {
       } catch (e) { console.warn('sms:new handler error', e) }
     })
 
-    socket.on('sms:update', (upd: { id: number; status: number }) => {
+    socket.on('sms:update', (upd: { id: number; status: string }) => {
       setMessages((prev) => applyStatusUpdate(prev, upd.id, upd.status))
     })
 
@@ -225,7 +230,7 @@ export default function ModemTab(props: Readonly<Props>) {
   }
 
   // Helper to apply a status update to the list without excessive nesting in effects
-  const applyStatusUpdate = (list: SmsMessage[], id: number, statusValue: number) => {
+  const applyStatusUpdate = (list: SmsMessage[], id: number, statusValue: string) => {
     let changed = false
     const next = list.map((m) => (m.id === id ? (changed = true, { ...m, status: statusValue }) : m))
     return changed ? next : list
@@ -279,7 +284,7 @@ export default function ModemTab(props: Readonly<Props>) {
           ) : (
             <div className="space-y-3">
               {messages.map((m) => {
-                const isStationMsg = m.status === 1
+                const isStationMsg = m.status === 'INBOX'
                 let senderName: string
                 if (isStationMsg) {
                   senderName = station?.label ?? 'Station'

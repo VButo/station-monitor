@@ -98,7 +98,7 @@ export function showDatabaseTimeAsUTC1(timestamp: string) {
 export function convertCroatianTimeToDbSearchTime(selectedDate: string, selectedTime: string): Date {
   // Create the datetime string but subtract 1 hour to convert from Croatian (UTC+2) to database time (UTC+1)
   const [hours, minutes] = selectedTime.split(':').map(Number);
-  const adjustedHours = hours; // Subtract 1 hour to get UTC+1 from UTC+2
+  const adjustedHours = hours - 1; // Subtract 1 hour to get UTC+1 from UTC+2
   
   // Handle hour rollover (e.g., 00:xx becomes 23:xx of previous day)
   let adjustedDate = selectedDate;

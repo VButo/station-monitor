@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 import * as stationService from '../services/stationService';
+import * as fieldService from '../services/fieldService';
 import { advancedStationDataCache } from '../services/cacheService';
-import { supabase } from '../utils/supabaseClient';
+import { supabase, createFreshSupabaseClient } from '../utils/supabaseClient';
+
+const freshSupabase = createFreshSupabaseClient();
 
 export async function getAverageStatus(req: Request, res: Response) {
   try {
@@ -15,7 +18,6 @@ export async function getAverageStatus(req: Request, res: Response) {
     }
   }
 }
-
 export async function fetchStationStatus(req: Request, res: Response) {
   try {
     const data = await stationService.fetchStationStatus();
@@ -32,7 +34,7 @@ export async function fetchStationStatus(req: Request, res: Response) {
 export async function getStationOverviewData(req: Request, res: Response) {
   try {
     // Call the new RPC function directly
-    const { data, error } = await supabase.rpc('get_station_hourly_fetch_health');
+    const { data, error } = await freshSupabase.rpc('get_station_hourly_health');
 
     if (error) {
       console.error('Error fetching station hourly fetch health data:', error);
@@ -78,7 +80,7 @@ export async function getHourlyAverageFetchHealth(req: Request, res: Response) {
 export async function getHourlyAverageFetchHealth7d(req: Request, res: Response) {
   try {
     // Call the new RPC function directly
-    const { data, error } = await supabase.rpc('get_hourly_avg_fetch_health7d');
+    const { data, error } = await supabase.rpc('get_global_3h_avg_fetch_health_7d');
 
     if (error) {
       console.error('Error fetching hourly average fetch health data:', error);
@@ -98,11 +100,13 @@ export async function getHourlyAverageFetchHealth7d(req: Request, res: Response)
   }
 }
 
-export async function getStatusTable(req: Request, res: Response) {
+export async function getStationsTable(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
+    const tableNameId = Number(req.params.tableNameId);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
-    const data = await stationService.getStatusTable(id);
+    if (Number.isNaN(tableNameId)) return res.status(400).json({ error: 'Invalid table name ID' });
+    const data = await stationService.getStationTable(id, tableNameId);
     res.json(data);
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -113,26 +117,20 @@ export async function getStatusTable(req: Request, res: Response) {
   }
 }
 
-export async function getPublicTable(req: Request, res: Response) {
+export async function getStationsTableWithDatetime(req: Request, res: Response) {
   try {
     const id = Number(req.params.id);
+    const tableNameId = Number(req.params.tableNameId);
+    const datetime = req.query.datetime as string;
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
-    const data = await stationService.getPublicTable(id);
-    res.json(data);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.status(500).json({ error: 'Unknown error' });
+    if (Number.isNaN(tableNameId)) return res.status(400).json({ error: 'Invalid table name ID' });
+    if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
+    // Validate datetime format
+    const parsedDatetime = new Date(datetime);
+    if (Number.isNaN(parsedDatetime.getTime())) {
+      return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
     }
-  }
-}
-
-export async function getMeasurementsTable(req: Request, res: Response) {
-  try {
-    const id = Number(req.params.id);
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
-    const data = await stationService.getMeasurementsTable(id);
+    const data = await stationService.getStationTableWithDatetime(id, tableNameId, parsedDatetime);
     res.json(data);
   } catch (error: unknown) {
     if (error instanceof Error) {
@@ -222,6 +220,19 @@ export async function getMeasurementsTableWithDatetime(req: Request, res: Respon
 export async function getStations(req: Request, res: Response) {
   const stations = await stationService.fetchStations();
   res.json(stations);
+}
+
+export async function getFieldNames(req: Request, res: Response) {
+  try {
+    const fieldNames = await fieldService.fetchFieldNamesFromDb();
+    res.json(fieldNames);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
 }
 
 export async function getStationById(req: Request, res: Response) {

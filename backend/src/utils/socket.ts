@@ -8,9 +8,19 @@ let ioServer: Server | null = null
 export async function initSocket(server: http.Server, corsOrigins: string[] = []) {
   if (ioServer) return ioServer
 
+  // Support flexible CORS handling: accept the request Origin when it is
+  // present in the allowed list. This is required when the client uses
+  // credentials (cookies) because Access-Control-Allow-Origin cannot be
+  // the wildcard (*) in that case.
   ioServer = new Server(server, {
     cors: {
-      origin: corsOrigins,
+      origin: (origin, callback) => {
+        // If no Origin header (non-browser client), allow it
+        if (!origin) return callback(null, true)
+        if (corsOrigins.includes(origin)) return callback(null, true)
+        const err = new Error('Origin not allowed')
+        return callback(err)
+      },
       credentials: true,
     },
   })

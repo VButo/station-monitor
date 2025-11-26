@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, use } from 'react';
-import { fetchStationById, getPublicTable, getStatusTable, getMeasurementsTable, fetchStations, fetchStationOverviewData } from '@/utils/stationHelpers';
+import { fetchStationById, fetchStations, fetchStationOverviewData, getStationTable } from '@/utils/stationHelpers';
 import type { CollectorDataKeyValue, StationHourlyData, Station } from '@/types/station';
 import OverviewTab from './components/OverviewTab';
 import PublicTab from './components/PublicTab';
@@ -45,9 +45,9 @@ export default function StationPage(props: StationPageProps) {
       setLoading(true);
       try {
         const data = await fetchStationById(stationIdNum);
-        const publicData = await getPublicTable(stationIdNum);
-        const statusData = await getStatusTable(stationIdNum);
-        const measurementsData = await getMeasurementsTable(stationIdNum);
+        const publicData = await getStationTable(stationIdNum, 1);
+        const statusData = await getStationTable(stationIdNum, 2);
+        const measurementsData = await getStationTable(stationIdNum, 3);
         const hourlyData = await fetchStationOverviewData();
 
         setHourlyData(hourlyData);

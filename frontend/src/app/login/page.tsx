@@ -72,8 +72,8 @@ export default function Login() {
           <div className="flex flex-col items-center mb-6">
             <Image 
               priority={false}
-              src="/metmonic_logo.svg"
-              alt="Metmonic monitoring logo"
+              src="/DT-MONITOR.png"
+              alt="DT Monitor logo"
               width={300}
               height={50}
               className="mb-4"

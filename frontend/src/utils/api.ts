@@ -49,23 +49,19 @@ export const getResponseTimes = async (): Promise<ResponseTimeData[]> => {
 // Overview API functions
 export interface OverviewData {
   station_id: number;
-  station_online: boolean;
-  fetch_health: number; // Online%
-  data_health: number;  // Health%
+  online: boolean;
+  network_health: number; // Connection health %
+  data_health: number;    // Data health %
 }
 
-export interface OnlineData24h {
-  station_id: number;
-  hourly_online_array: boolean[];
-  hourly_health_array: number[];
-  hour_bucket_local: string[];
-}
-
-export interface OnlineData7d {
-  station_id: number;
-  hourly_online_array: boolean[];
-  hourly_health_array: number[];
-  hour_bucket_local: string[];
+// Aggregated hourly arrays returned by overview RPCs (single-row aggregate)
+export interface OnlineData {
+  hourly_data_health: number[];
+  hourly_data_health_min: number[];
+  hourly_data_health_max: number[];
+  hourly_network_health: number[];
+  hourly_avg_online_count: number[];
+  hour_labels: string[];
 }
 
 export const getOverviewData24h = async (): Promise<OverviewData[]> => {
@@ -78,12 +74,12 @@ export const getOverviewData7d = async (): Promise<OverviewData[]> => {
   return response.data.data;
 };
 
-export const getOnlineData24h = async (): Promise<OnlineData24h[]> => {
-  const response = await api.get<{ data: OnlineData24h[] }>('/online-data-24h');
+export const getOnlineData24h = async (): Promise<OnlineData[]> => {
+  const response = await api.get<{ data: OnlineData[] }>('/online-data-24h');
   return response.data.data;
 };
 
-export const getOnlineData7d = async (): Promise<OnlineData7d[]> => {
-  const response = await api.get<{ data: OnlineData7d[] }>('/online-data-7d');
+export const getOnlineData7d = async (): Promise<OnlineData[]> => {
+  const response = await api.get<{ data: OnlineData[] }>('/online-data-7d');
   return response.data.data;
 };

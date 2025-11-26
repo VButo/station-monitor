@@ -13,18 +13,18 @@ interface OverviewTabProps {
 
 const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
   // Find station data
-  const stationData = hourlyData.find(d => d.station_id === station.id);
-  console.log(stationData);
+  const stationData = hourlyData.find(d => d._station_id === station.id);
+  console.log("stationData", stationData);
   // Prepare online chart data (convert boolean array to number array for TimelineCell)
   const onlineChartData =
-    stationData?.hourly_online_array?.length === 24 
-      ? stationData.hourly_online_array
+    stationData?.hourly_network_health?.length === 24 
+      ? stationData.hourly_network_health
       : ('Error' as const);
 
   // Prepare health chart data  
   const healthChartData =
-    stationData?.hourly_health_array?.length === 24 
-      ? stationData.hourly_health_array 
+    stationData?.hourly_data_health?.length === 24 
+      ? stationData.hourly_data_health 
       : ('Error' as const);
 
   // Extract timestamps if they exist and length matches
@@ -90,14 +90,40 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
     { label: 'Latitude', value: station.latitude },
     { label: 'Longitude', value: station.longitude },
     { label: 'Altitude', value: station.altitude },
-    { label: 'IP Address', value: station.ip },
-    { label: 'Modem HTTP', value: station.modem_http_port ? station.ip + ':' + station.modem_http_port : 'N/A' },
-    { label: 'Modem HTTPS', value: station.modem_https_port ? station.ip + ':' + station.modem_https_port : 'N/A' },
-    { label: 'Datalogger Pakbus', value: station.datalogger_pakbus_port ? station.ip + ':' + station.datalogger_pakbus_port : 'N/A' },
-    { label: 'Datalogger HTTP', value: station.datalogger_http_port ? station.ip + ':' + station.datalogger_http_port : 'N/A' },
+    { label: 'Modem HTTP', value: station.ip_modem_http},
+    { label: 'Modem HTTPS', value: station.ip_modem_https},
+    { label: 'Datalogger Pakbus', value: station.ip_datalogger_pakbus},
+    { label: 'Datalogger HTTP', value: station.ip_datalogger_http},
     { label: 'SMS Number', value: station.sms_number ? '+' + station.sms_number : 'N/A' },
     { label: 'Collect Enabled', value: station.collect_enabled ? 'Yes' : 'No' },
   ];
+
+  // Helper: build a href from an "ip:port" value. Decide protocol by port.
+  const buildHostHref = (host?: string | number) => {
+    if (!host) return null;
+    const raw = String(host).trim();
+    if (!raw || raw === 'N/A') return null;
+
+    // If value already contains a scheme, trust it
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) return raw;
+
+    // Support bracketed IPv6 like [::1]:443
+    const ipv6Match = raw.match(/\[(.*)\]:(\d+)$/);
+    let port: string | null = null;
+    if (ipv6Match) {
+      port = ipv6Match[2];
+    } else {
+      // Split on colon; last segment is port for typical "ip:port"
+      const parts = raw.split(':');
+      if (parts.length > 1) port = parts[parts.length - 1];
+    }
+
+    // Known secure ports
+    const securePorts = new Set(['443', '8443', '9443']);
+    const protocol = port && securePorts.has(port) ? 'https' : 'http';
+
+    return `${protocol}://${raw}`;
+  };
 
   return (
     <div>
@@ -157,14 +183,20 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
           <div className="kv-row" key={label}>
             <span className="kv-key">{label}</span>
             {isLinkField && typeof value === 'string' && value !== 'N/A' ? (
-              <a
-                href={value === `${station.ip}:443` ? `https://${value}` : `http://${value}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="kv-value kv-link text-gray-500 text-decoration-underline hover:text-blue-700"
-              >
-                {value === `${station.ip}:443` ? `https://${value}` : `http://${value}`}
-              </a>
+              (() => {
+                const href = buildHostHref(value);
+                if (!href) return <span className="kv-value">{value}</span>;
+                return (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="kv-value kv-link text-gray-500 text-decoration-underline hover:text-blue-700"
+                  >
+                    {href}
+                  </a>
+                );
+              })()
             ) : (
               <span className="kv-value">{value}</span>
             )}

@@ -22,7 +22,7 @@ export interface RowData {
   status: number[] | 'Loading...' | 'Error';
   timestamps?: string[];
   avg_data_health_24h: number | null;
-  avg_fetch_health_24h: number;
+  avg_network_health_24h: number;
 }
 
 interface StationTableProps {
@@ -126,7 +126,7 @@ function createColumnDefs(isMobile: boolean, onRowClick: (stationId: string) => 
     nameCol,
     typeCol,
     makePercentCol('Health (24h)', 'avg_data_health_24h'),
-    makePercentCol('Online (24h)', 'avg_fetch_health_24h'),
+    makePercentCol('Online (24h)', 'avg_network_health_24h'),
     timelineCol
   ];
 }
@@ -145,7 +145,7 @@ function useFilteredData(rowData: RowData[], searchTerm: string) {
         row.label_id,
         String(row.id),
         String(row.avg_data_health_24h || ''),
-        String(row.avg_fetch_health_24h || '')
+        String(row.avg_network_health_24h || '')
       ];
       return searchableValues.some(value => 
         value.toLowerCase().includes(term)
@@ -251,7 +251,7 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
           <div 
             className="ag-theme-alpine" 
             style={{ 
-              height: 'calc(100vh - 320px)', 
+              height: '64vh', 
               minWidth: isMobile ? '800px' : '600px',
               width: isMobile ? 'max-content' : '100%'
             }}

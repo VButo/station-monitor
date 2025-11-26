@@ -1,4 +1,4 @@
-import type { Station, HourStatus, AvgStatus, CollectorDataKeyValue, AdvancedStationData, StationHourlyData, HourlyAvgFetchHealth } from '@/types/station'
+import type { Station, HourStatus, AvgStatus, CollectorDataKeyValue, AdvancedStationData, StationHourlyData, HourlyAvgHealth } from '@/types/station'
 import api from './api';
 
 export async function fetchStations(): Promise<Station[]> {
@@ -6,8 +6,8 @@ export async function fetchStations(): Promise<Station[]> {
   return res.data;
 }
 
-export async function fetchStationStatus(): Promise<HourStatus[]> {
-  const res = await api.get<HourStatus[]>(`/stations/station-status`);
+export async function fetchStationStatus(): Promise<StationHourlyData[]> {
+  const res = await api.get<StationHourlyData[]>(`/stations/station-status`);
   return res.data;
 }
 
@@ -16,15 +16,27 @@ export async function fetchStationOverviewData(): Promise<StationHourlyData[]> {
   return res.data.data;
 }
 
-export async function fetchHourlyAvgFetchHealth(): Promise<HourlyAvgFetchHealth[]> {
-  const res = await api.get<{ success: boolean; data: HourlyAvgFetchHealth[] }>(`/stations/hourly-average-fetch-health`);
-  return res.data.data;
+/**
+ * Fetch hourly average health (24h). Returns single-row object or null on empty.
+ */
+export async function fetchHourlyAvgHealth24h(): Promise<HourlyAvgHealth | null> {
+  const res = await api.get<{ success: boolean; data: HourlyAvgHealth[] }>(`/stations/hourly-average-fetch-health`);
+  const payload = res.data?.data;
+  if (!payload || !Array.isArray(payload) || payload.length === 0) return null;
+  return payload[0] ?? null;
 }
 
-export async function fetchHourlyAvgFetchHealth7d(): Promise<HourlyAvgFetchHealth[]> {
-  const res = await api.get<{ success: boolean; data: HourlyAvgFetchHealth[] }>(`/stations/hourly-average-fetch-health-7d`);
-  return res.data.data;
+/**
+ * Fetch hourly average health (7d). Returns single-row object or null on empty.
+ */
+export async function fetchHourlyAvgHealth7d(): Promise<HourlyAvgHealth | null> {
+  const res = await api.get<{ success: boolean; data: HourlyAvgHealth[] }>(`/stations/hourly-average-fetch-health-7d`);
+  const payload = res.data?.data;
+  if (!payload || !Array.isArray(payload) || payload.length === 0) return null;
+  return payload[0] ?? null;
 }
+// NOTE: hourly-average fetch helpers removed — overview page now uses the overview
+// API routes (`/online-data-24h` and `/online-data-7d`) to obtain aggregated data.
 
 export async function fetchStationById(id: number): Promise<Station | null> {
   const res = await api.get<Station>(`/stations/${id}`);
@@ -36,18 +48,15 @@ export async function getAverageStatus(): Promise<AvgStatus[]> {
   return res.data;
 }
 
-export async function getPublicTable(id: number): Promise<CollectorDataKeyValue[]> {
-  const res = await api.get<CollectorDataKeyValue[]>(`/stations/public-table/${id}`);
+export async function getStationTable(id: number, tableNameId: number): Promise<CollectorDataKeyValue[]> {
+  const res = await api.get<CollectorDataKeyValue[]>(`/stations/stations-table/${id}/${tableNameId}`);
   return res.data;
 }
 
-export async function getStatusTable(id: number): Promise<CollectorDataKeyValue[]> {
-  const res = await api.get<CollectorDataKeyValue[]>(`/stations/status-table/${id}`);
-  return res.data;
-}
-
-export async function getMeasurementsTable(id: number): Promise<CollectorDataKeyValue[]> {
-  const res = await api.get<CollectorDataKeyValue[]>(`/stations/measurements-table/${id}`);
+export async function getStationTableWithDatetime(id: number, tableNameId: number, datetime: Date): Promise<CollectorDataKeyValue[]> {
+  const res = await api.get<CollectorDataKeyValue[]>(`/stations/table-datetime/${id}/${tableNameId}`, {
+    params: { datetime: datetime.toISOString() }
+  });
   return res.data;
 }
 
