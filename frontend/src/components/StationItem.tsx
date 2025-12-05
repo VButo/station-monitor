@@ -58,16 +58,16 @@ export default function StationGrid({ data, onRowClick }: StationItemProps) {
         console.log(hourlyData)
         const updatedRowData = await Promise.all(
           data.map(async (station) => {
-            const stationHealth = hourlyData.find(d => d.station_id === station.id);
+            const stationHealth = hourlyData.find(d => d._station_id === station.id);
             return {
               id: station.id,
               label_id: station.label_id,
               label_text: station.label_name,
               label_type: station.label_type,
-              status: stationHealth?.hourly_avg_array?.length === 24 ? stationHealth.hourly_avg_array : ('Error' as const),
+              status: stationHealth?.hourly_network_health?.length === 24 ? stationHealth.hourly_network_health : ('Error' as const),
               timestamps: stationHealth?.hour_bucket_local?.length === 24 ? stationHealth.hour_bucket_local : [],
               avg_data_health_24h: avgStatusData.find(d => d.station_id === station.id)?.avg_data_health_24h || null,
-              avg_fetch_health_24h: avgStatusData.find(d => d.station_id === station.id)?.avg_fetch_health_24h || 0,
+              avg_fetch_health_24h: avgStatusData.find(d => d.station_id === station.id)?.avg_network_health_24h || 0,
             };
           })
         );

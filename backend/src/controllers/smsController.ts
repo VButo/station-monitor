@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import * as smsService from '../services/smsService';
 import { getIo } from '../utils/socket';
+import { logger } from '../utils/logger';
 
 
 export async function smsRecieved(req: Request, res: Response) {
     try {
         const { number, message } = req.body;
-        console.log(`SMS received from ${number}: ${message}`);
+        logger.info('Inbound SMS received', { number });
         // Here you can add logic to process the SMS message as needed
         if (!number || !message) {
             return res.status(400).json({ error: 'Missing number or message in request body' });
@@ -16,12 +17,12 @@ export async function smsRecieved(req: Request, res: Response) {
             const io = getIo()
             io.to(`station:${responseMessage.station_id}`).emit('sms:new', responseMessage)
         } catch (e) {
-            console.warn('Failed to emit socket event sms:new in smsRecieved:', e);
+            logger.warn('Failed to emit socket event sms:new in smsRecieved', { error: e });
         }
         res.status(200).json({ success: true, message: responseMessage });
     }
     catch (error) {
-        console.error('Error in smsRecieved controller:', error);
+        logger.error('Error in smsRecieved controller', { error });
         res.status(500).json({ error: 'Internal server error' });
     }
 }
@@ -46,7 +47,7 @@ export async function sendToDevice(req: Request, res: Response) {
                                         const u = await svc.getUser(token)
                                         return u?.id ?? null
                                     } catch (e) {
-                                        console.warn('Failed to decode auth token in sendToDevice:', e)
+                                        logger.warn('Failed to decode auth token in sendToDevice', { error: e })
                                         return null
                                     }
                                 }
@@ -71,7 +72,7 @@ export async function sendToDevice(req: Request, res: Response) {
             const io = getIo()
             io.to(`station:${inserted.station_id}`).emit('sms:new', inserted)
         } catch (e) {
-            console.warn('Failed to emit socket event sms:new in sendToDevice:', e);
+            logger.warn('Failed to emit socket event sms:new in sendToDevice', { error: e });
         }
 
         // Attempt to send to device
@@ -85,16 +86,16 @@ export async function sendToDevice(req: Request, res: Response) {
                             const io = getIo()
                             io.to(`station:${inserted.station_id}`).emit('sms:update', { id: inserted.id, status: newStatus })
                         } catch (e) {
-                            console.warn('Failed to emit socket event sms:update in sendToDevice:', e);
+                            logger.warn('Failed to emit socket event sms:update in sendToDevice', { error: e });
                         }
                     }
         } catch (e) {
-            console.warn('Failed to update SMS status:', e);
+            logger.warn('Failed to update SMS status', { error: e });
         }
 
         res.status(200).json({ success: result.ok, url: result.url, status: result.status ?? null, error: result.error ?? null, insertedId: inserted?.id ?? null });
     } catch (err) {
-        console.error('Error in sendToDevice controller:', err);
+        logger.error('Error in sendToDevice controller', { error: err });
         res.status(500).json({ error: 'Internal server error' });
     }
 }
@@ -106,7 +107,7 @@ export async function getMessagesByStation(req: Request, res: Response) {
         const rows = await smsService.getMessagesForStation(stationId);
                 res.status(200).json({ success: true, data: rows });
     } catch (err) {
-        console.error('Error in getMessagesByStation:', err);
+        logger.error('Error in getMessagesByStation', { error: err });
         res.status(500).json({ error: 'Internal server error' });
     }
 }
@@ -124,7 +125,7 @@ export async function getUsernamesForMessages(req: Request, res: Response) {
             }
         res.status(200).json({ success: true, data: map });
     } catch (err) {
-        console.error('Error in getUsernamesForMessages:', err);
+        logger.error('Error in getUsernamesForMessages', { error: err });
         res.status(500).json({ error: 'Internal server error' });
     }
 }

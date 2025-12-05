@@ -93,14 +93,16 @@ The system runs on a 10-minute cycle:
 ## Configuration
 
 ### Environment Variables
-- Uses existing Supabase environment variables
-- No additional configuration required
+- `RUN_SCHEDULER` (default `true`): set to `false` on any replica or worker where the cron job should stay idle. Only one process in the cluster should run the scheduler to avoid duplicate database load.
+- Reuses the existing Supabase environment variables for data fetching.
 
 ### Customization Options
 - **Cache Duration**: Modify cron schedule in `schedulerService.ts`
 - **Client Cache**: 5-minute browser cache via Cache-Control headers
 
 ## Usage in Production
+
+> **Single-worker requirement:** run the advanced scheduler in exactly one backend instance (or container). If you horizontally scale the API, set `RUN_SCHEDULER=false` on the extra replicas so they serve cached data without triggering duplicate cron jobs.
 
 ### Frontend Handling
 ```javascript

@@ -1,0 +1,9 @@
+# Docker ignore for frontend
+node_modules
+npm-debug.log
+.DS_Store
+.git
+.env*
+.next
+out
+Dockerfile

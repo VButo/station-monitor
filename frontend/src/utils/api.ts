@@ -1,8 +1,10 @@
 // Axios instance for frontend API calls to backend
 import axios from 'axios';
 
+// Prefer same-origin relative API in production behind a reverse proxy (e.g., Nginx)
+// For local/dev without proxy, set NEXT_PUBLIC_API_URL to your backend URL.
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || '/api',
   withCredentials: true, // Send cookies with requests
 });
 

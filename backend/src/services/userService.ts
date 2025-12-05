@@ -1,5 +1,6 @@
 // userService.ts
 import { supabase } from '../utils/supabaseClient'
+import { logger } from '../utils/logger'
 
 export class UserService {
   // Sign in user
@@ -32,13 +33,13 @@ export class UserService {
       try {
         const { data, error } = await supabase.auth.admin.getUserById(id)
         if (error) {
-          console.warn('getUserById error for', id, error)
+          logger.warn('getUserById error', { id, error })
           results.push({ id, email: null })
         } else {
           results.push({ id, email: data?.user?.email ?? null })
         }
       } catch (e) {
-        console.warn('Exception when fetching user by id', id, e)
+        logger.warn('Exception when fetching user by id', { id, error: e })
         results.push({ id, email: null })
       }
     }

@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import { fetchAdvancedStationData } from './stationService';
 import { advancedStationDataCache } from './cacheService';
+import { logger } from '../utils/logger';
 
 class AdvancedDataScheduler {
   private cronJob: cron.ScheduledTask | null = null;
@@ -12,7 +13,7 @@ class AdvancedDataScheduler {
    */
   public start(): void {
     if (this.cronJob) {
-      console.log('[SCHEDULER] Cron job already running');
+      logger.warn('[SCHEDULER] Cron job already running');
       return;
     }
 
@@ -21,7 +22,7 @@ class AdvancedDataScheduler {
     this.cronJob = cron.schedule('0 9,19,29,39,49,59 * * * *', async () => {
       // Prevent overlapping runs: if previous job still running, skip this tick
       if (this.isRunning) {
-        console.warn('[SCHEDULER] Previous fetch still running - skipping this scheduled run to avoid overlapping jobs');
+        logger.warn('[SCHEDULER] Previous fetch still running - skipping this scheduled run to avoid overlapping jobs');
         return;
       }
       await this.fetchDataJob();
@@ -30,12 +31,12 @@ class AdvancedDataScheduler {
     });
 
     this.isRunning = true;
-    console.log('[SCHEDULER] Advanced station data cron job started - runs every 10 minutes on 9th minute');
-    console.log('[SCHEDULER] Schedule: 9, 19, 29, 39, 49, 59 minutes of every hour');
+  logger.info('[SCHEDULER] Advanced station data cron job started - runs every 10 minutes on 9th minute');
+  logger.info('[SCHEDULER] Schedule: 9, 19, 29, 39, 49, 59 minutes of every hour');
     
     // Run initial fetch after a short delay
     setTimeout(() => {
-      console.log('[SCHEDULER] Running initial data fetch...');
+  logger.info('[SCHEDULER] Running initial data fetch...');
       this.fetchDataJob();
     }, 2000);
   }
@@ -48,7 +49,7 @@ class AdvancedDataScheduler {
       this.cronJob.stop();
       this.cronJob = null;
       this.isRunning = false;
-      console.log('[SCHEDULER] Advanced station data cron job stopped');
+  logger.info('[SCHEDULER] Advanced station data cron job stopped');
     }
   }
 
@@ -68,7 +69,7 @@ class AdvancedDataScheduler {
    * Manually trigger a data fetch (for testing)
    */
   public async triggerManualFetch(): Promise<any> {
-    console.log('[SCHEDULER] Manual fetch triggered');
+  logger.info('[SCHEDULER] Manual fetch triggered');
     return await this.fetchDataJob();
   }
 
@@ -79,7 +80,9 @@ class AdvancedDataScheduler {
     const startTime = advancedStationDataCache.recordFetchStart();
     this.isRunning = true; // mark as running
     try {
-      console.log(`[SCHEDULER] Starting scheduled data fetch at ${new Date().toISOString()}`);
+      logger.info('[SCHEDULER] Starting scheduled data fetch', {
+        timestamp: new Date().toISOString(),
+      });
 
       // Fetch fresh data from database
       const data = await fetchAdvancedStationData();
@@ -87,13 +90,13 @@ class AdvancedDataScheduler {
       // Cache the data
       advancedStationDataCache.recordFetchSuccess(startTime, data);
 
-      console.log(`[SCHEDULER] Scheduled fetch completed successfully`);
+  logger.info('[SCHEDULER] Scheduled fetch completed successfully');
       return data;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       advancedStationDataCache.recordFetchError(startTime, errorMessage);
 
-      console.error('[SCHEDULER] Scheduled fetch failed:', error);
+  logger.error('[SCHEDULER] Scheduled fetch failed', { error });
       throw error;
     } finally {
       this.isRunning = false; // clear running flag

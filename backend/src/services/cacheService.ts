@@ -1,4 +1,5 @@
 // Cache service for storing advanced station data
+import { logger } from '../utils/logger';
 interface CachedData {
   data: any;
   lastUpdated: Date;
@@ -39,7 +40,10 @@ class AdvancedStationDataCache {
       isStale: false
     };
     
-    console.log(`[CACHE] Data cached at ${now.toISOString()}, next update at ${nextUpdate.toISOString()}`);
+    logger.info('[CACHE] Data cached', {
+      lastUpdated: now.toISOString(),
+      nextUpdate: nextUpdate.toISOString(),
+    });
   }
 
   /**
@@ -47,7 +51,7 @@ class AdvancedStationDataCache {
    */
   public getData(): any {
     if (!this.cache) {
-      console.log('[CACHE] No data in cache');
+  logger.warn('[CACHE] No data in cache');
       return null;
     }
 
@@ -56,11 +60,14 @@ class AdvancedStationDataCache {
     // Mark as stale if past next update time
     if (now > this.cache.nextUpdate) {
       this.cache.isStale = true;
-      console.log('[CACHE] Data is stale but will be served');
+  logger.warn('[CACHE] Data is stale but will be served');
     }
 
     this.metadata.cacheHits++;
-    console.log(`[CACHE] Serving cached data (${this.cache.isStale ? 'stale' : 'fresh'}), cache hits: ${this.metadata.cacheHits}`);
+    logger.info('[CACHE] Serving cached data', {
+      freshness: this.cache.isStale ? 'stale' : 'fresh',
+      cacheHits: this.metadata.cacheHits,
+    });
     
     return this.cache.data;
   }
@@ -106,7 +113,10 @@ class AdvancedStationDataCache {
     
     this.setData(data);
     
-    console.log(`[CACHE] Fetch completed in ${duration}ms (avg: ${Math.round(this.metadata.averageFetchTime)}ms)`);
+    logger.info('[CACHE] Fetch completed', {
+      durationMs: duration,
+      rollingAverageMs: Math.round(this.metadata.averageFetchTime),
+    });
   }
 
   /**
@@ -119,7 +129,10 @@ class AdvancedStationDataCache {
     this.metadata.lastFetchDuration = duration;
     this.metadata.lastError = error;
     
-    console.error(`[CACHE] Fetch failed after ${duration}ms: ${error}`);
+    logger.error('[CACHE] Fetch failed', {
+      durationMs: duration,
+      error,
+    });
   }
 
   /**
@@ -174,7 +187,7 @@ class AdvancedStationDataCache {
    */
   public clearCache(): void {
     this.cache = null;
-    console.log('[CACHE] Cache cleared');
+    logger.warn('[CACHE] Cache cleared');
   }
 }
 

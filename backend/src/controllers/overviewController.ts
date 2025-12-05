@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { getOverviewData24h, getOverviewData7d, getOnlineData24h, getOnlineData7d } from '../services/overviewService';
+import { logger } from '../utils/logger';
 
 export const getOverviewData24hHandler = async (req: Request, res: Response) => {
   try {
@@ -10,7 +11,7 @@ export const getOverviewData24hHandler = async (req: Request, res: Response) => 
       data: data
     });
   } catch (error) {
-    console.error('Error in getOverviewData24hHandler:', error);
+    logger.error('Error in getOverviewData24hHandler', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch overview data for the last 24 hours'
@@ -27,7 +28,7 @@ export const getOverviewData7dHandler = async (req: Request, res: Response) => {
       data: data
     });
   } catch (error) {
-    console.error('Error in getOverviewData7dHandler:', error);
+    logger.error('Error in getOverviewData7dHandler', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch overview data for the last 7 days'
@@ -45,7 +46,7 @@ export const getOnlineData24hHandler = async (req: Request, res: Response) => {
       data: data
     });
   } catch (error) {
-    console.error('Error in getOnlineData24hHandler:', error);
+    logger.error('Error in getOnlineData24hHandler', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch 24h online data'
@@ -64,7 +65,7 @@ export const getOnlineData7dHandler = async (req: Request, res: Response) => {
       data: data
     });
   } catch (error) {
-    console.error('Error in getOnlineData7dHandler:', error);
+    logger.error('Error in getOnlineData7dHandler', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch 7d online data'

@@ -1,5 +1,6 @@
 import { supabase } from '../utils/supabaseClient';
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '../utils/logger';
 
 // Create a dedicated client for RPC calls with explicit service role
 const supabaseUrl = process.env.SUPABASE_URL!;
@@ -41,13 +42,13 @@ export const getOverviewData24h = async (): Promise<OverviewData[]> => {
     const { data, error } = await rpcClient.rpc('get_station_overview_24h');
 
     if (error) {
-      console.error('Error fetching overview data:', error);
+      logger.error('Error fetching overview data (24h)', { error });
       throw new Error('Failed to fetch overview data for the last 24 hours');
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error in getOverviewData24h:', error);
+    logger.error('Error in getOverviewData24h', { error });
     throw error;
   }
 };
@@ -57,13 +58,13 @@ export const getOverviewData7d = async (): Promise<OverviewData[]> => {
     const { data, error } = await rpcClient.rpc('get_station_overview_7d');
 
     if (error) {
-      console.error('Error fetching overview data:', error);
+      logger.error('Error fetching overview data (7d)', { error });
       throw new Error('Failed to fetch overview data for the last 7 days');
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error in getOverviewData7d:', error);
+    logger.error('Error in getOverviewData7d', { error });
     throw error;
   }
 };
@@ -73,13 +74,13 @@ export const getOnlineData24h = async (): Promise<OnlineData[]> => {
     const { data, error } = await rpcClient.rpc('get_hourly_avg_health_24h');
 
     if (error) {
-      console.error('Error fetching 24h online data:', error);
+      logger.error('Error fetching 24h online data', { error });
       throw new Error('Failed to fetch 24h online data');
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error in getOnlineData24h:', error);
+    logger.error('Error in getOnlineData24h', { error });
     throw error;
   }
 };
@@ -89,13 +90,13 @@ export const getOnlineData7d = async (): Promise<OnlineData[]> => {
     const { data, error } = await rpcClient.rpc('get_hourly_avg_health_7d');
 
     if (error) {
-      console.error('Error fetching 7d online data:', error);
+      logger.error('Error fetching 7d online data', { error });
       throw new Error('Failed to fetch 7d online data');
     }
 
     return data || [];
   } catch (error) {
-    console.error('Error in getOnlineData7d:', error);
+    logger.error('Error in getOnlineData7d', { error });
     throw error;
   }
 };

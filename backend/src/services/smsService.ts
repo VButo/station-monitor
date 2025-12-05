@@ -1,6 +1,7 @@
 import { supabase } from '../utils/supabaseClient';
 /* createClient not needed here */
 import axios from 'axios';
+import { logger } from '../utils/logger';
 
 export async function smsRecieved(number: string, message: string) {
   try {
@@ -9,7 +10,10 @@ export async function smsRecieved(number: string, message: string) {
       .select('id')
       .eq('sms_number', number)
       .single();
-      console.log("sms_number:", number, "station_id:", station_id, "message:", message, "data id", station_id.data?.id);
+      logger.info('SMS metadata resolved', {
+        number,
+        stationId: station_id.data?.id ?? null,
+      });
     const payload = {
       station_id: station_id.data?.id ?? null,
       user_id: null,
@@ -25,7 +29,7 @@ export async function smsRecieved(number: string, message: string) {
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error processing received SMS:', error);
+  logger.error('Error processing received SMS', { error });
     throw error;
   }
 }

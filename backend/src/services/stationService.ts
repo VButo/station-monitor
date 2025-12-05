@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabaseClient';
+import { logger } from '../utils/logger';
 import { createClient } from '@supabase/supabase-js';
 import { getFieldNamesCached } from './fieldService';
 
@@ -25,13 +26,13 @@ async function testDatabaseConnection() {
   try {
     const { error } = await supabase.from('stations').select('id').limit(1);
     if (error) {
-      console.error('Database connection test failed:', error);
+  logger.error('Database connection test failed', { error });
       return false;
     }
-    console.log('Database connection test passed');
+  logger.info('Database connection test passed');
     return true;
   } catch (err) {
-    console.error('Database connection test error:', err);
+  logger.error('Database connection test error', { error: err });
     return false;
   }
 }
@@ -99,7 +100,7 @@ export async function getStationTable(id: number, tableNameId: number) {
     const fieldNames = await getFieldNamesCached();
 
     if (error) {
-      console.error(`Error fetching table (ID: ${tableNameId}) for station ${id}:`, error);
+      logger.error('Error fetching station table', { stationId: id, tableNameId, error });
       throw error;
     }
 
@@ -109,7 +110,7 @@ export async function getStationTable(id: number, tableNameId: number) {
     return mapStationRows(data, fieldNames);
 
   } catch (err) {
-    console.error(`Failed to fetch table (ID: ${tableNameId}) for station ${id}:`, err);
+    logger.error('Failed to fetch station table', { stationId: id, tableNameId, error: err });
     return [];
   }
 }
@@ -117,7 +118,11 @@ export async function getStationTable(id: number, tableNameId: number) {
 
 export async function getStationTableWithDatetime(id:number, tableNameId:number, datetime:Date){
   try {
-    console.log(`Attempting to fetch table (ID: ${tableNameId}) for station ${id} at ${datetime.toISOString()}`);
+    logger.info('Fetching station table window', {
+      stationId: id,
+      tableNameId,
+      endTime: datetime.toISOString(),
+    });
     const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
     
     const { data, error } = await rpcClient.rpc('get_station_data_kv_by_time', { 
@@ -128,12 +133,23 @@ export async function getStationTableWithDatetime(id:number, tableNameId:number,
     });
 
     if (error) {
-      console.error(`Error fetching table (ID: ${tableNameId}) for station ${id} at start date:${dateTime.toISOString()} to end:${datetime.toISOString()}:`, error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+      logger.error('Error fetching station table window', {
+        stationId: id,
+        tableNameId,
+        startTime: dateTime.toISOString(),
+        endTime: datetime.toISOString(),
+        error,
+      });
       throw error;
     }
 
-    console.log(`Fetched table (ID: ${tableNameId}) for station ${id} at start date:${dateTime.toISOString()} to end:${datetime.toISOString()}: ${data?.length || 0} records`);
+    logger.info('Fetched station table window', {
+      stationId: id,
+      tableNameId,
+      startTime: dateTime.toISOString(),
+      endTime: datetime.toISOString(),
+      records: data?.length ?? 0,
+    });
     
     // If we have field name metadata, map rows to friendly keys
     try {
@@ -142,12 +158,17 @@ export async function getStationTableWithDatetime(id:number, tableNameId:number,
         return mapStationRows(data ?? [], fieldNames);
       }
     } catch (e) {
-      console.warn('Failed to fetch field names for mapping in getStationTableWithDatetime:', e);
+      logger.warn('Failed to fetch field names for mapping in getStationTableWithDatetime', { error: e });
     }
 
     return data || [];
   } catch (err) {
-    console.error(`Failed to fetch table (ID: ${tableNameId}) for station ${id} at ${datetime.toISOString()}:`, err);
+    logger.error('Failed to fetch station table window', {
+      stationId: id,
+      tableNameId,
+      endTime: datetime.toISOString(),
+      error: err,
+    });
     return [];
   }
 }
@@ -155,7 +176,10 @@ export async function getStationTableWithDatetime(id:number, tableNameId:number,
 // New datetime-enabled table functions
 export async function getPublicTableWithDatetime(id: number, datetime: Date) {
   try {
-    console.log(`Attempting to fetch public table for station ${id} at ${datetime.toISOString()}`);
+    logger.info('Fetching public table window', {
+      stationId: id,
+      endTime: datetime.toISOString(),
+    });
     
     const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
     
@@ -165,22 +189,32 @@ export async function getPublicTableWithDatetime(id: number, datetime: Date) {
     });
     
     if (error) {
-      console.error(`Error fetching public table with datetime for station ${id}:`, error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+      logger.error('Error fetching public table window', {
+        stationId: id,
+        timestamp: dateTime.toISOString(),
+        error,
+      });
       throw error;
     }
     
-    console.log(`Public table with datetime for station ${id}: ${data?.length || 0} records`);
+    logger.info('Fetched public table window', {
+      stationId: id,
+      timestamp: dateTime.toISOString(),
+      records: data?.length ?? 0,
+    });
     return data || [];
   } catch (err) {
-    console.error(`Failed to fetch public table with datetime for station ${id}:`, err);
+    logger.error('Failed to fetch public table window', { stationId: id, error: err });
     return [];
   }
 }
 
 export async function getStatusTableWithDatetime(id: number, datetime: Date) {
   try {
-    console.log(`Attempting to fetch status table for station ${id} at ${datetime.toISOString()}`);
+    logger.info('Fetching status table window', {
+      stationId: id,
+      endTime: datetime.toISOString(),
+    });
 
     const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
     
@@ -190,22 +224,31 @@ export async function getStatusTableWithDatetime(id: number, datetime: Date) {
     });
     
     if (error) {
-      console.error(`Error fetching status table with datetime for station ${id}:`, error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+      logger.error('Error fetching status table window', {
+        stationId: id,
+        timestamp: dateTime.toISOString(),
+        error,
+      });
       throw error;
     }
-    console.log(data);
-    console.log(`Status table with datetime for station ${id}: ${data?.length || 0} records`);
+    logger.info('Fetched status table window', {
+      stationId: id,
+      timestamp: dateTime.toISOString(),
+      records: data?.length ?? 0,
+    });
     return data || [];
   } catch (err) {
-    console.error(`Failed to fetch status table with datetime for station ${id}:`, err);
+    logger.error('Failed to fetch status table window', { stationId: id, error: err });
     return [];
   }
 }
 
 export async function getMeasurementsTableWithDatetime(id: number, datetime: Date) {
   try {
-    console.log(`Attempting to fetch measurements table for station ${id} at ${datetime.toISOString()}`);
+    logger.info('Fetching measurements table window', {
+      stationId: id,
+      endTime: datetime.toISOString(),
+    });
     
     // Calculate start datetime (10 minutes before the provided datetime)
     const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
@@ -215,15 +258,22 @@ export async function getMeasurementsTableWithDatetime(id: number, datetime: Dat
       _datetime: dateTime.toISOString()
     });
     if (error) {
-      console.error(`Error fetching measurements table with datetime for station ${id}:`, error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
+      logger.error('Error fetching measurements table window', {
+        stationId: id,
+        timestamp: dateTime.toISOString(),
+        error,
+      });
       throw error;
     }
     
-    console.log(`Measurements table with datetime for station ${id}: ${data?.length || 0} records`);
+    logger.info('Fetched measurements table window', {
+      stationId: id,
+      timestamp: dateTime.toISOString(),
+      records: data?.length ?? 0,
+    });
     return data || [];
   } catch (err) {
-    console.error(`Failed to fetch measurements table with datetime for station ${id}:`, err);
+    logger.error('Failed to fetch measurements table window', { stationId: id, error: err });
     return [];
   }
 }
@@ -252,7 +302,7 @@ function keyValueArrayToObject(keyValueArray: any[]): Record<string, string> {
 // Comprehensive function to fetch all combined data for all stations
 export async function fetchAdvancedStationData() {
   try {
-    console.log('Starting fetchAdvancedStationData...');
+    logger.info('Starting fetchAdvancedStationData');
 
     // Test database connection first
     const connectionOk = await testDatabaseConnection();
@@ -261,23 +311,23 @@ export async function fetchAdvancedStationData() {
     }
 
     // Fetch all basic data
-    const stations = await fetchStations();
-    console.log('Fetched stations count:', stations.length);
+  const stations = await fetchStations();
+  logger.info('Fetched stations count', { count: stations.length });
 
     // Fetch status metadata (small set) first
     const [stationStatuses, avgStatuses] = await Promise.all([
       fetchStationStatus(),
       getAverageStatus()
     ]);
-    console.log('Fetched status data:', {
+    logger.info('Fetched status data', {
       stationStatuses: stationStatuses.length,
       avgStatuses: avgStatuses.length
     });
 
     // Concurrency control: limit number of stations processed in parallel
     // to avoid exhausting the Supabase/PostgREST connection pool.
-    const concurrencyLimit = Number.parseInt(process.env.ADVANCED_FETCH_CONCURRENCY || '5', 10) || 5;
-    console.log(`Processing stations in batches with concurrency=${concurrencyLimit}`);
+  const concurrencyLimit = Number.parseInt(process.env.ADVANCED_FETCH_CONCURRENCY || '5', 10) || 5;
+  logger.info('Processing stations in batches', { concurrency: concurrencyLimit });
 
     const advancedData: any[] = [];
 
@@ -293,14 +343,18 @@ export async function fetchAdvancedStationData() {
 
         // Debug logging for first station
         if (station.id === stations[0]?.id) {
-          console.log(`Station ${station.id} data counts:`, {
+          logger.info('Station data counts snapshot', {
+            stationId: station.id,
             publicData: publicData.length,
             statusData: statusData.length,
             measurementsData: measurementsData.length
           });
 
           if (publicData.length > 0) {
-            console.log('Sample public data:', publicData.slice(0, 2));
+            logger.info('Sample public data', {
+              stationId: station.id,
+              sample: publicData.slice(0, 2)
+            });
           }
         }
 
@@ -343,7 +397,7 @@ export async function fetchAdvancedStationData() {
           total_measurements: measurementsData.length
         };
       } catch (error) {
-        console.error(`Error fetching data for station ${station.id}:`, error);
+  logger.error('Error fetching data for station', { stationId: station.id, error });
 
         // Return basic station data even if table data fails
         return {
@@ -377,7 +431,10 @@ export async function fetchAdvancedStationData() {
       const chunk = stations.slice(i, i + concurrencyLimit);
       const chunkResults = await Promise.all(chunk.map(processStation));
       advancedData.push(...chunkResults);
-      console.log(`Processed stations ${i + 1}-${Math.min(i + concurrencyLimit, stations.length)}`);
+      logger.info('Processed station batch', {
+        startIndex: i + 1,
+        endIndex: Math.min(i + concurrencyLimit, stations.length)
+      });
     }
 
   // Calculate all possible keys for dynamic columns
@@ -391,7 +448,7 @@ export async function fetchAdvancedStationData() {
       for (const key of Object.keys(station.measurements_data)) measurementKeys.add(key);
     }
 
-    console.log('Final aggregated keys:', {
+    logger.info('Final aggregated keys', {
       publicKeysCount: publicKeys.size,
       statusKeysCount: statusKeys.size,
       measurementKeysCount: measurementKeys.size
@@ -422,7 +479,7 @@ export async function fetchAdvancedStationData() {
       }
     };
   } catch (error) {
-    console.error('Error fetching advanced station data:', error);
+    logger.error('Error fetching advanced station data', { error });
     throw error;
   }
 }

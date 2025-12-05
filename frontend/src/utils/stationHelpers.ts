@@ -1,4 +1,4 @@
-import type { Station, HourStatus, AvgStatus, CollectorDataKeyValue, AdvancedStationData, StationHourlyData, HourlyAvgHealth } from '@/types/station'
+import type { Station, AvgStatus, CollectorDataKeyValue, AdvancedStationData, StationHourlyData, HourlyAvgHealth } from '@/types/station'
 import api from './api';
 
 export async function fetchStations(): Promise<Station[]> {

@@ -3,6 +3,7 @@ import * as stationService from '../services/stationService';
 import * as fieldService from '../services/fieldService';
 import { advancedStationDataCache } from '../services/cacheService';
 import { supabase, createFreshSupabaseClient } from '../utils/supabaseClient';
+import { logger } from '../utils/logger';
 
 const freshSupabase = createFreshSupabaseClient();
 
@@ -37,7 +38,7 @@ export async function getStationOverviewData(req: Request, res: Response) {
     const { data, error } = await freshSupabase.rpc('get_station_hourly_health');
 
     if (error) {
-      console.error('Error fetching station hourly fetch health data:', error);
+      logger.error('Error fetching station hourly fetch health data', { error });
       throw new Error('Failed to fetch station hourly fetch health data');
     }
     
@@ -46,7 +47,7 @@ export async function getStationOverviewData(req: Request, res: Response) {
       data: data || []
     });
   } catch (error) {
-    console.error('Error in getStationOverviewData:', error);
+    logger.error('Error in getStationOverviewData', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch station overview data'
@@ -60,7 +61,7 @@ export async function getHourlyAverageFetchHealth(req: Request, res: Response) {
     const { data, error } = await supabase.rpc('get_hourly_avg_fetch_health');
 
     if (error) {
-      console.error('Error fetching hourly average fetch health data:', error);
+      logger.error('Error fetching hourly average fetch health data', { error });
       throw new Error('Failed to fetch hourly average fetch health data');
     }
     
@@ -69,7 +70,7 @@ export async function getHourlyAverageFetchHealth(req: Request, res: Response) {
       data: data || []
     });
   } catch (error) {
-    console.error('Error in getHourlyAverageFetchHealth:', error);
+    logger.error('Error in getHourlyAverageFetchHealth', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch hourly average fetch health data'
@@ -83,7 +84,7 @@ export async function getHourlyAverageFetchHealth7d(req: Request, res: Response)
     const { data, error } = await supabase.rpc('get_global_3h_avg_fetch_health_7d');
 
     if (error) {
-      console.error('Error fetching hourly average fetch health data:', error);
+      logger.error('Error fetching hourly average fetch health 7d data', { error });
       throw new Error('Failed to fetch hourly average fetch health data');
     }
     
@@ -92,7 +93,7 @@ export async function getHourlyAverageFetchHealth7d(req: Request, res: Response)
       data: data || []
     });
   } catch (error) {
-    console.error('Error in getHourlyAverageFetchHealth:', error);
+    logger.error('Error in getHourlyAverageFetchHealth7d', { error });
     res.status(500).json({
       success: false,
       error: 'Failed to fetch hourly average fetch health data'
@@ -243,7 +244,7 @@ export async function getStationById(req: Request, res: Response) {
 
 export async function getAdvancedStationData(req: Request, res: Response) {
   try {
-    console.log('Advanced station data request received - serving from cache only');
+    logger.info('Advanced station data request received');
     
     // Set cache headers to allow efficient caching since data is refreshed periodically
     res.set({
@@ -255,13 +256,13 @@ export async function getAdvancedStationData(req: Request, res: Response) {
     const cachedData = advancedStationDataCache.getData();
     
     if (cachedData) {
-      console.log('Advanced station data served from cache successfully');
+      logger.info('Advanced station data served from cache successfully');
       res.json(cachedData);
       return;
     }
     
     // No cached data available - return appropriate response
-    console.log('No cached data available - data is being fetched in background');
+  logger.warn('Advanced station data cache miss - data is being fetched in background');
     res.status(503).json({ 
       error: 'Data not available yet',
       message: 'Advanced station data is being fetched. Please try again in a few moments.',
@@ -270,7 +271,7 @@ export async function getAdvancedStationData(req: Request, res: Response) {
     });
     
   } catch (error) {
-    console.error('Error serving advanced station data:', error);
+    logger.error('Error serving advanced station data', { error });
     res.status(500).json({ 
       error: 'Failed to retrieve advanced station data',
       details: error instanceof Error ? error.message : 'Unknown error'

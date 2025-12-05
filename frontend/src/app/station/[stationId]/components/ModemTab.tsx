@@ -26,7 +26,7 @@ export default function ModemTab(props: Readonly<Props>) {
   }, [userMap])
 
   const callBackendSend = async (number: string, text: string, stationId?: number) => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || ''
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api'
     try {
       type SendPayload = { number: string; message: string; station_id?: number }
       const bodyPayload: SendPayload = { number, message: text }
@@ -53,7 +53,7 @@ export default function ModemTab(props: Readonly<Props>) {
     if (!station?.id) return
 
     let mounted = true
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || ''
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api'
     const ac = new AbortController()
 
   const fetchMissingUsernames = async (userIds: string[]) => {
@@ -82,7 +82,10 @@ export default function ModemTab(props: Readonly<Props>) {
 
     const fetchMessages = async () => {
       try {
-        const r = await fetch(`${apiBase}/sms/station/${station.id}`, { signal: ac.signal })
+        const r = await fetch(`${apiBase}/sms/station/${station.id}`, {
+          signal: ac.signal,
+          credentials: 'include',
+        })
         const body = await r.json().catch(() => null)
         if (!mounted) return
         if (body?.success && Array.isArray(body.data)) {
@@ -118,7 +121,7 @@ export default function ModemTab(props: Readonly<Props>) {
 
   // Socket.io: connect once and listen for realtime events
   useEffect(() => {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || ''
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api'
   if (!apiBase) return
   // If NEXT_PUBLIC_API_URL includes an API path (e.g. '/api'), remove it
   // because socket.io is served at the root '/socket.io' path on the server.

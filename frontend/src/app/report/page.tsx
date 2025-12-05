@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { fetchStations, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime, getStationTableWithDatetime } from '@/utils/stationHelpers';
+import { fetchStations, getStationTableWithDatetime } from '@/utils/stationHelpers';
 import type { CollectorDataKeyValue, Station } from '@/types/station';
 import PublicTab from '../station/[stationId]/components/PublicTab';
 import StatusTab from '../station/[stationId]/components/StatusTab';

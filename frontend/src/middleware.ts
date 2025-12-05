@@ -32,16 +32,28 @@ export async function middleware(request: NextRequest) {
   // Token exists - validate it before making routing decisions
   let isValidToken = false
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'
+    // Use internal API URL when running inside Docker/containers so the middleware
+    // can reach the backend service over the Compose network. Fallbacks:
+    // - NEXT_PUBLIC_API_URL (dev override)
+    // - same-origin relative '/api' (when fronted by a reverse proxy)
+    const apiUrl = process.env.INTERNAL_API_URL
+      || process.env.NEXT_PUBLIC_API_URL
+      || new URL('/api', request.url).toString()
+    const controller = new AbortController()
+    // 2500ms timeout to avoid hanging the edge request
+    const timeout = setTimeout(() => controller.abort(), 2500)
+
     const response = await fetch(`${apiUrl}/users/me`, {
       headers: {
         'Cookie': `supabase-token=${token}`,
       },
+      signal: controller.signal,
     })
-    
+    clearTimeout(timeout)
+
     isValidToken = response.ok && response.status !== 401
   } catch (error) {
-    console.warn('Middleware: Unable to validate token:', error)
+    console.warn('Middleware: Unable to validate token (timeout or network error):', error)
     isValidToken = false
   }
   
@@ -81,6 +93,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * Feel free to modify this pattern to include more paths.
      */
-    String.raw`/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)`,
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
