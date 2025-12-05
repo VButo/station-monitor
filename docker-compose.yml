@@ -5,9 +5,6 @@ services:
       dockerfile: backend/Dockerfile
     env_file:
       - ./backend/.env
-    # Map host 4001 -> container 4000 (internal stays 4000)
-    ports:
-      - "4001:4000"
     networks:
       - appnet
     restart: unless-stopped
@@ -23,9 +20,6 @@ services:
       - NEXT_PUBLIC_API_URL=/api
       # Middleware (running inside the frontend container) should call backend via service DNS
       - INTERNAL_API_URL=http://backend:4000/api
-    # Map host 3001 -> container 3000 (internal stays 3000)
-    ports:
-      - "3001:3000"
     networks:
       - appnet
     restart: unless-stopped

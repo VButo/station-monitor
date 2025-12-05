@@ -120,9 +120,9 @@ export async function getStationsTable(req: Request, res: Response) {
 
 export async function getStationsTableWithDatetime(req: Request, res: Response) {
   try {
-    const id = Number(req.params.id);
-    const tableNameId = Number(req.params.tableNameId);
-    const datetime = req.query.datetime as string;
+    const id = Number((res.locals as any).validatedParams?.id ?? req.params.id);
+    const tableNameId = Number((res.locals as any).validatedParams?.tableNameId ?? req.params.tableNameId);
+    const datetime = ((res.locals as any).validatedQuery?.datetime ?? req.query.datetime) as string;
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     if (Number.isNaN(tableNameId)) return res.status(400).json({ error: 'Invalid table name ID' });
     if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
@@ -145,8 +145,8 @@ export async function getStationsTableWithDatetime(req: Request, res: Response) 
 // New datetime-enabled table functions
 export async function getPublicTableWithDatetime(req: Request, res: Response) {
   try {
-    const id = Number(req.params.id);
-    const datetime = req.query.datetime as string;
+    const id = Number((res.locals as any).validatedParams?.id ?? req.params.id);
+    const datetime = ((res.locals as any).validatedQuery?.datetime ?? req.query.datetime) as string;
     
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
@@ -170,8 +170,8 @@ export async function getPublicTableWithDatetime(req: Request, res: Response) {
 
 export async function getStatusTableWithDatetime(req: Request, res: Response) {
   try {
-    const id = Number(req.params.id);
-    const datetime = req.query.datetime as string;
+    const id = Number((res.locals as any).validatedParams?.id ?? req.params.id);
+    const datetime = ((res.locals as any).validatedQuery?.datetime ?? req.query.datetime) as string;
 
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
@@ -195,8 +195,8 @@ export async function getStatusTableWithDatetime(req: Request, res: Response) {
 
 export async function getMeasurementsTableWithDatetime(req: Request, res: Response) {
   try {
-    const id = Number(req.params.id);
-    const datetime = req.query.datetime as string;
+    const id = Number((res.locals as any).validatedParams?.id ?? req.params.id);
+    const datetime = ((res.locals as any).validatedQuery?.datetime ?? req.query.datetime) as string;
 
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
     if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });

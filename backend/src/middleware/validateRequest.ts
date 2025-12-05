@@ -1,12 +1,12 @@
 import { RequestHandler } from 'express';
-import { ZodSchema, ZodTypeAny, ZodError } from 'zod';
+import { ZodError } from 'zod';
 import { logger } from '../utils/logger';
 
-interface SchemaBundle {
-  body?: ZodSchema<any>;
-  query?: ZodSchema<any>;
-  params?: ZodSchema<any>;
-}
+type SchemaBundle = {
+  body?: any;
+  query?: any;
+  params?: any;
+};
 
 const formatError = (error: ZodError) =>
   error.issues.map((issue) => ({
@@ -18,13 +18,15 @@ export const validateRequest = (schemas: SchemaBundle): RequestHandler => {
   return (req, res, next) => {
     try {
       if (schemas.body) {
-        req.body = schemas.body.parse(req.body);
+        // Express 5 request properties like body/query/params are getter-only.
+        // Parse and attach validated payloads to res.locals instead of mutating req.
+        res.locals.validatedBody = schemas.body.parse(req.body);
       }
       if (schemas.query) {
-        req.query = schemas.query.parse(req.query);
+        res.locals.validatedQuery = schemas.query.parse(req.query);
       }
       if (schemas.params) {
-        req.params = schemas.params.parse(req.params);
+        res.locals.validatedParams = schemas.params.parse(req.params);
       }
       return next();
     } catch (error) {
