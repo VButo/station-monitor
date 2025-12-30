@@ -63,6 +63,7 @@ export interface OnlineData {
   hourly_data_health_max: number[];
   hourly_network_health: number[];
   hourly_avg_online_count: number[];
+  hourly_avg_offline_count: number[];
   hour_labels: string[];
 }
 

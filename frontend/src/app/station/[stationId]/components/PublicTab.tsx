@@ -43,8 +43,8 @@ const PublicTab: React.FC<PublicTabProps> = ({ publicData }) => {
         .kv-key {
           font-weight: 500;
           color: #8593a5;
-          width: 300px;
-          min-width: 300px;
+          width: 400px;
+          min-width: 400px;
           padding-right: 24px;
           flex-shrink: 0;
         }

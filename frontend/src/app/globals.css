@@ -49,3 +49,11 @@ body {
 .kv-value {
   width: auto;
 }
+
+/* Allow AG Grid header text to wrap to multiple lines, including long tokens */
+.ag-theme-alpine .ag-header .ag-header-cell.wrap-anywhere .ag-header-cell-text {
+  white-space: normal;           /* allow wrapping */
+  overflow-wrap: anywhere;       /* break long words/tokens */
+  word-break: break-word;        /* fallback */
+  line-height: 1.2;
+}

@@ -33,8 +33,7 @@ export default function AdvancedTable({
   // height = "",
   onRowClick,
   defaultSelectedColumns = [
-    'label', 'ip_address', 'online_24h_avg', 'data_health_24h_avg',
-    'latitude', 'longitude', 'altitude', /* 'county' intentionally not default-selected */ 'sms_number'
+    'label', 'county', 'online_24h_avg', 'data_health_24h_avg', 'sms_number'
   ],
   showControls = true
 }: AdvancedTableProps) {
@@ -67,6 +66,12 @@ export default function AdvancedTable({
   const exportDropdownRef = useRef<HTMLDivElement>(null);
   const desktopColumnPanelRef = useRef<HTMLDivElement>(null);
   const mobileColumnDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Datetime compare controls
+  const [compareDateTime, setCompareDateTime] = useState<string>('');
+  const [includeDateTimeCompare, setIncludeDateTimeCompare] = useState<boolean>(false);
+  const [dateTimeData, setDateTimeData] = useState<AdvancedStationData[]>([]);
+  const [historySelectedColumns, setHistorySelectedColumns] = useState<Set<string>>(new Set());
 
   // Mobile detection hook
   useEffect(() => {
@@ -145,6 +150,28 @@ export default function AdvancedTable({
     };
   }, []);
 
+  // Fetch advanced table snapshot at a specific datetime
+  useEffect(() => {
+    let cancelled = false;
+    const fetchAtDatetime = async () => {
+      if (!compareDateTime) { setDateTimeData([]); return; }
+      try {
+        console.log("Fetching advanced table for datetime:", compareDateTime);
+  const res = await api.get<{ stations: AdvancedStationData[] }>(`/stations/advanced-table-datetime?datetime=${encodeURIComponent(compareDateTime)}`);
+        if (!cancelled && res.status === 200) {
+          setDateTimeData(res.data.stations ?? []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to fetch advanced table at datetime', err);
+          setDateTimeData([]);
+        }
+      }
+    };
+    fetchAtDatetime();
+    return () => { cancelled = true; };
+  }, [compareDateTime]);
+
   // Load persisted state on component mount
   useEffect(() => {
     const persistedState = loadState();
@@ -191,7 +218,10 @@ export default function AdvancedTable({
         station.label_name,
         station.label_type,
         station.label,
-        station.ip,
+        station.ip_modem_http,
+        station.ip_modem_https,
+        station.ip_datalogger_pakbus,
+        station.ip_datalogger_http,
         station.sms_number,
         String(station.label_id)
       ];
@@ -289,7 +319,7 @@ export default function AdvancedTable({
     }
   }, [onRowClick, router, searchParams]);
 
-  // Column visibility management
+  // Show columns management
   const toggleColumnVisibility = useCallback((columnId: string, isVisible: boolean) => {
     setSelectedColumns(prev => {
       const newSet = new Set(prev);
@@ -317,7 +347,7 @@ export default function AdvancedTable({
         // Exclude pinned columns (label_id, label_name, label_type) - they're pinned on desktop but configurable on mobile
         columnsToToggle = [
           'label', 'latitude', 'longitude', 'altitude', 'county', 
-          'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
+          'ip_modem_http', 'ip_modem_https', 'ip_datalogger_pakbus', 'ip_datalogger_http', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 'online_7d_graph', 'data_health_24h_graph', 'data_health_7d_graph', 
           'online_last_seen', 'data_health_24h_avg', 'data_health_7d_avg'
         ];
         break;
@@ -348,6 +378,75 @@ export default function AdvancedTable({
     });
   }, [stationData, columnStructure]);
 
+  // History column visibility management
+  const toggleHistoryColumnVisibility = useCallback((columnId: string, isVisible: boolean) => {
+    setHistorySelectedColumns(prev => {
+      const newSet = new Set(prev);
+      if (isVisible) {
+        newSet.add(columnId);
+      } else {
+        newSet.delete(columnId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const toggleHistoryColumnGroup = useCallback((groupName: string, isVisible: boolean) => {
+    if (!includeDateTimeCompare || !compareDateTime || dateTimeData.length === 0) return;
+
+    const publicKeys = Object.keys(columnStructure?.public_data ?? {});
+    const statusKeys = Object.keys(columnStructure?.status_data ?? {});
+    const measurementKeys = Object.keys(columnStructure?.measurements_data ?? {});
+
+    let columnsToToggle: string[] = [];
+    switch (groupName) {
+      case 'history-public-data':
+        columnsToToggle = ['history_public_timestamp', ...publicKeys.map(key => `history_public_data.${key}`)];
+        break;
+      case 'history-status-data':
+        columnsToToggle = ['history_status_timestamp', ...statusKeys.map(key => `history_status_data.${key}`)];
+        break;
+      case 'history-measurements':
+        columnsToToggle = ['history_measurements_timestamp', ...measurementKeys.map(key => `history_measurements_data.${key}`)];
+        break;
+    }
+
+    setHistorySelectedColumns(prev => {
+      const newSet = new Set(prev);
+      for (const colId of columnsToToggle) {
+        if (isVisible) newSet.add(colId); else newSet.delete(colId);
+      }
+      return newSet;
+    });
+  }, [includeDateTimeCompare, compareDateTime, dateTimeData.length, columnStructure]);
+
+  const getHistoryGroupState = useCallback((groupName: string): 'all' | 'some' | 'none' => {
+    if (!includeDateTimeCompare || !compareDateTime || dateTimeData.length === 0) return 'none';
+
+    const publicKeys = Object.keys(columnStructure.public_data);
+    const statusKeys = Object.keys(columnStructure.status_data);
+    const measurementKeys = Object.keys(columnStructure.measurements_data);
+
+    let columnsInGroup: string[] = [];
+    switch (groupName) {
+      case 'history-public-data':
+        columnsInGroup = ['history_public_timestamp', ...publicKeys.map(key => `history_public_data.${key}`)];
+        break;
+      case 'history-status-data':
+        columnsInGroup = ['history_status_timestamp', ...statusKeys.map(key => `history_status_data.${key}`)];
+        break;
+      case 'history-measurements':
+        columnsInGroup = ['history_measurements_timestamp', ...measurementKeys.map(key => `history_measurements_data.${key}`)];
+        break;
+    }
+
+    if (columnsInGroup.length === 0) return 'none';
+    const selectedCount = columnsInGroup.filter(colId => historySelectedColumns.has(colId)).length;
+    if (selectedCount === columnsInGroup.length) return 'all';
+    if (selectedCount > 0) return 'some';
+    return 'none';
+  }, [includeDateTimeCompare, compareDateTime, dateTimeData.length, columnStructure, historySelectedColumns]);
+
   // Helper function to get group selection state (fully selected, partially selected, or not selected)
   const getGroupState = useCallback((groupName: string): 'all' | 'some' | 'none' => {
     if (stationData.length === 0) return 'none';
@@ -362,7 +461,7 @@ export default function AdvancedTable({
         // Exclude pinned columns (label_id, label_name, label_type) - they're pinned on desktop but configurable on mobile
         columnsInGroup = [
           'label', 'latitude', 'longitude', 'altitude', 'county', 
-          'ip_address', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 
+          'ip_modem_http', 'ip_modem_https', 'ip_datalogger_pakbus', 'ip_datalogger_http', 'sms_number', 'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 'online_7d_graph', 'data_health_24h_graph', 'data_health_7d_graph', 
           'online_last_seen', 'data_health_24h_avg', 'data_health_7d_avg'
         ];
         break;
@@ -413,8 +512,8 @@ export default function AdvancedTable({
   const showAllColumns = useCallback(() => {
     const allColumnIds = new Set([
       // Basic columns
-      'label', 'latitude', 'longitude', 'altitude', 'county', 'ip_address', 'sms_number',
-      'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 'online_last_seen',
+      'label', 'latitude', 'longitude', 'altitude', 'county', 'ip_modem_http', 'ip_modem_https', 'ip_datalogger_pakbus', 'ip_datalogger_http', 'sms_number',
+  'online_24h_avg', 'online_7d_avg', 'online_24h_graph', 'online_7d_graph', 'data_health_24h_graph', 'data_health_7d_graph', 'online_last_seen',
       'data_health_24h_avg', 'data_health_7d_avg',
       // Timestamp columns
       'public_timestamp', 'status_timestamp', 'measurements_timestamp',
@@ -611,6 +710,13 @@ export default function AdvancedTable({
       minWidth: 80,
       maxWidth: 100,
       cellStyle: { fontWeight: '600' },
+      // Ensure numeric behavior for sorting/filtering regardless of underlying data type
+      valueGetter: (params) => {
+        const v = params.data?.label_id;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      },
+      comparator: createNumericComparator(),
       filter: 'agNumberColumnFilter',
       filterParams: { buttons: ['reset', 'apply'] }
     });
@@ -651,7 +757,7 @@ export default function AdvancedTable({
       filter: 'agTextColumnFilter',
       filterParams: { buttons: ['reset', 'apply'] }
     });
-  }, [handleRowClick]);
+  }, [handleRowClick, createNumericComparator]);
 
   // Helper function to add station info columns
   const addStationInfoColumns = useCallback((columns: ColDef[], selected: Set<string>) => {
@@ -708,13 +814,107 @@ export default function AdvancedTable({
       });
     }
 
-    if (selected.has('ip_address')) {
+    if (selected.has('ip_modem_http')) {
       columns.push({
-        headerName: 'IP Address',
-        field: 'ip',
-        minWidth: 150,
+        headerName: 'IP Modem (HTTP)',
+        field: 'ip_modem_http',
+        minWidth: 180,
         filter: 'agTextColumnFilter',
-        filterParams: { buttons: ['reset', 'apply'] }
+        filterParams: { buttons: ['reset', 'apply'] },
+        cellRenderer: (params: ICellRendererParams) => {
+          const value = params.value as string | undefined
+          if (!value) return ''
+          const href = `http://${value}`
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {value}
+            </a>
+          )
+        }
+      });
+    }
+
+    if (selected.has('ip_modem_https')) {
+      columns.push({
+        headerName: 'IP Modem (HTTPS)',
+        field: 'ip_modem_https',
+        minWidth: 180,
+        filter: 'agTextColumnFilter',
+        filterParams: { buttons: ['reset', 'apply'] },
+        cellRenderer: (params: ICellRendererParams) => {
+          const value = params.value as string | undefined
+          if (!value) return ''
+          const href = `https://${value}`
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {value}
+            </a>
+          )
+        }
+      });
+    }
+
+    if (selected.has('ip_datalogger_pakbus')) {
+      columns.push({
+        headerName: 'IP Datalogger (PakBus)',
+        field: 'ip_datalogger_pakbus',
+        minWidth: 200,
+        filter: 'agTextColumnFilter',
+        filterParams: { buttons: ['reset', 'apply'] },
+        cellRenderer: (params: ICellRendererParams) => {
+          const value = params.value as string | undefined
+          if (!value) return ''
+          const href = `http://${value}`
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {value}
+            </a>
+          )
+        }
+      });
+    }
+
+    if (selected.has('ip_datalogger_http')) {
+      columns.push({
+        headerName: 'IP Datalogger (HTTP)',
+        field: 'ip_datalogger_http',
+        minWidth: 200,
+        filter: 'agTextColumnFilter',
+        filterParams: { buttons: ['reset', 'apply'] },
+        cellRenderer: (params: ICellRendererParams) => {
+          const value = params.value as string | undefined
+          if (!value) return ''
+          const href = `http://${value}`
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {value}
+            </a>
+          )
+        }
       });
     }
 
@@ -737,19 +937,18 @@ export default function AdvancedTable({
         field: 'avg_fetch_health_24h',
         minWidth: 120,
         maxWidth: 150,
-        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
-        filter: 'agNumberColumnFilter',
-        filterParams: { buttons: ['reset', 'apply'] }
-      });
-    }
-
-    if (selected.has('online_7d_avg')) {
-      columns.push({
-        headerName: 'Online_7d_Avg',
-        field: 'avg_fetch_health_7d',
-        minWidth: 120,
-        maxWidth: 150,
-        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
+        valueGetter: params => {
+          const raw = (params.data as Record<string, unknown>)?.['avg_fetch_health_24h'];
+          const num = Number(raw);
+          if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+          return Math.round(num * 100) / 100;
+        },
+        valueFormatter: params => {
+          if (params.value === null || params.value === undefined) return '';
+          const num = Number(params.value);
+          if (Number.isNaN(num)) return '';
+          return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2)}%`;
+        },
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
       });
@@ -762,6 +961,45 @@ export default function AdvancedTable({
         cellRenderer: TimelineCell,
         cellRendererParams: (params: { data?: AdvancedStationData }) => ({
           timestamps: params.data?.hourly_timestamps,
+        }),
+        sortable: false,
+        filter: false,
+        minWidth: 250
+      });
+    }
+
+    if (selected.has('online_7d_avg')) {
+      columns.push({
+        headerName: 'Online_7d_Avg',
+        field: 'avg_fetch_health_7d',
+        minWidth: 120,
+        maxWidth: 150,
+        valueGetter: params => {
+          const raw = (params.data as Record<string, unknown>)?.['avg_fetch_health_7d'];
+          const num = Number(raw);
+          if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+          return Math.round(num * 100) / 100;
+        },
+        valueFormatter: params => {
+          if (params.value === null || params.value === undefined) return '';
+          const num = Number(params.value);
+          if (Number.isNaN(num)) return '';
+          return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2)}%`;
+        },
+        filter: 'agNumberColumnFilter',
+        filterParams: { buttons: ['reset', 'apply'] }
+      });
+    }
+
+    if (selected.has('online_7d_graph')) {
+      columns.push({
+        headerName: 'Online_7d_Graph',
+        field: 'hourly_status_7d',
+        cellRenderer: TimelineCell,
+        cellRendererParams: (params: { data?: AdvancedStationData }) => ({
+          timestamps: params.data?.hourly_timestamps_7d,
+          maxBars: 29,
+          BarWidth: 5.2,
         }),
         sortable: false,
         filter: false,
@@ -790,9 +1028,35 @@ export default function AdvancedTable({
         field: 'avg_data_health_24h',
         minWidth: 120,
         maxWidth: 180,
-        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
+        valueGetter: params => {
+          const raw = (params.data as Record<string, unknown>)?.['avg_data_health_24h'];
+          const num = Number(raw);
+          if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+          return Math.round(num * 100) / 100;
+        },
+        valueFormatter: params => {
+          if (params.value === null || params.value === undefined) return '';
+          const num = Number(params.value);
+          if (Number.isNaN(num)) return '';
+          return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2)}%`;
+        },
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
+      });
+    }
+
+    // Data Health 24h Graph independent of Avg selection
+    if (selected.has('data_health_24h_graph')) {
+      columns.push({
+        headerName: 'Data_Health_24h_Graph',
+        field: 'hourly_data_status',
+        cellRenderer: TimelineCell,
+        cellRendererParams: (params: { data?: AdvancedStationData }) => ({
+          timestamps: params.data?.hourly_timestamps,
+        }),
+        sortable: false,
+        filter: false,
+        minWidth: 250,
       });
     }
 
@@ -802,9 +1066,37 @@ export default function AdvancedTable({
         field: 'avg_data_health_7d',
         minWidth: 130,
         maxWidth: 170,
-        valueFormatter: params => params.value === null || params.value === undefined ? '' : `${params.value}%`,
+        valueGetter: params => {
+          const raw = (params.data as Record<string, unknown>)?.['avg_data_health_7d'];
+          const num = Number(raw);
+          if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+          return Math.round(num * 100) / 100;
+        },
+        valueFormatter: params => {
+          if (params.value === null || params.value === undefined) return '';
+          const num = Number(params.value);
+          if (Number.isNaN(num)) return '';
+          return Number.isInteger(num) ? `${num}%` : `${num.toFixed(2)}%`;
+        },
         filter: 'agNumberColumnFilter',
         filterParams: { buttons: ['reset', 'apply'] }
+      });
+    }
+
+    // Data Health 7d Graph independent of Avg selection
+    if (selected.has('data_health_7d_graph')) {
+      columns.push({
+        headerName: 'Data_Health_7d_Graph',
+        field: 'hourly_data_status_7d',
+        cellRenderer: TimelineCell,
+        cellRendererParams: (params: { data?: AdvancedStationData }) => ({
+          timestamps: params.data?.hourly_timestamps_7d,
+          maxBars: 29,
+          BarWidth: 5.2,
+        }),
+        sortable: false,
+        filter: false,
+        minWidth: 250,
       });
     }
   }, [createDateFilterParams]);
@@ -853,7 +1145,19 @@ export default function AdvancedTable({
           headerName: `${prefix}: ${key}`,
           field: colId,
           minWidth: 120,
-          valueGetter: params => (params.data as Record<string, Record<string, unknown>>)?.[dataField]?.[key] || '',
+          valueGetter: params => {
+            const raw = (params.data as Record<string, Record<string, unknown>>)?.[dataField]?.[key];
+            if (!isNumeric) return (raw ?? '') as unknown;
+            const num = Number(raw);
+            if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+            return Math.round(num * 100) / 100;
+          },
+          valueFormatter: isNumeric ? (params => {
+            if (params.value === null || params.value === undefined) return '';
+            const num = Number(params.value);
+            if (Number.isNaN(num)) return '';
+            return Number.isInteger(num) ? `${num}` : num.toFixed(2);
+          }) : undefined,
           comparator: isNumeric ? createNumericComparator() : undefined,
           filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
           filterParams: { buttons: ['reset', 'apply'] }
@@ -887,8 +1191,139 @@ export default function AdvancedTable({
     addDynamicDataColumns(columns, selectedColumns, columnStructure.status_data, 'Status', 'status_data');
     addDynamicDataColumns(columns, selectedColumns, columnStructure.measurements_data, 'Measurements', 'measurements_data');
 
+    // If history is enabled, add separate history columns based on selections
+    if (includeDateTimeCompare && compareDateTime && dateTimeData.length > 0) {
+      const dtById = new Map<number, AdvancedStationData>();
+      for (const row of dateTimeData) dtById.set(row.id, row);
+
+      if (historySelectedColumns.has('history_public_timestamp')) {
+        columns.push({
+          headerName: `Public: Timestamp (${compareDateTime})`,
+          field: 'history_public_timestamp',
+          minWidth: 160,
+          valueGetter: params => {
+            const dtRow = dtById.get((params.data as AdvancedStationData).id);
+            return (dtRow as unknown as Record<string, unknown>)?.['public_timestamp'] || '';
+          },
+          filter: 'agDateColumnFilter',
+          filterParams: createDateFilterParams(),
+        });
+      }
+      if (historySelectedColumns.has('history_status_timestamp')) {
+        columns.push({
+          headerName: `Status: Timestamp (${compareDateTime})`,
+          field: 'history_status_timestamp',
+          minWidth: 160,
+          valueGetter: params => {
+            const dtRow = dtById.get((params.data as AdvancedStationData).id);
+            return (dtRow as unknown as Record<string, unknown>)?.['status_timestamp'] || '';
+          },
+          filter: 'agDateColumnFilter',
+          filterParams: createDateFilterParams(),
+        });
+      }
+      if (historySelectedColumns.has('history_measurements_timestamp')) {
+        columns.push({
+          headerName: `Measurements: Timestamp (${compareDateTime})`,
+          field: 'history_measurements_timestamp',
+          minWidth: 160,
+          valueGetter: params => {
+            const dtRow = dtById.get((params.data as AdvancedStationData).id);
+            return (dtRow as unknown as Record<string, unknown>)?.['measurements_timestamp'] || '';
+          },
+          filter: 'agDateColumnFilter',
+          filterParams: createDateFilterParams(),
+        });
+      }
+
+      for (const key of Object.keys(columnStructure.public_data)) {
+        const colId = `history_public_data.${key}`;
+        if (historySelectedColumns.has(colId)) {
+          const isNumeric = isColumnNumeric('public_data', key);
+          columns.push({
+            headerName: `Public: ${key} (${compareDateTime})`,
+            field: colId,
+            minWidth: 120,
+            valueGetter: params => {
+              const dtRow = dtById.get((params.data as AdvancedStationData).id);
+              const raw = (dtRow as unknown as Record<string, Record<string, unknown>>)?.['public_data']?.[key];
+              if (!isNumeric) return (raw ?? '') as unknown;
+              const num = Number(raw);
+              if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+              return Math.round(num * 100) / 100;
+            },
+            valueFormatter: isNumeric ? (params => {
+              if (params.value === null || params.value === undefined) return '';
+              const num = Number(params.value);
+              if (Number.isNaN(num)) return '';
+              return Number.isInteger(num) ? `${num}` : num.toFixed(2);
+            }) : undefined,
+            comparator: isNumeric ? createNumericComparator() : undefined,
+            filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+            filterParams: { buttons: ['reset', 'apply'] },
+          });
+        }
+      }
+      for (const key of Object.keys(columnStructure.status_data)) {
+        const colId = `history_status_data.${key}`;
+        if (historySelectedColumns.has(colId)) {
+          const isNumeric = isColumnNumeric('status_data', key);
+          columns.push({
+            headerName: `Status: ${key} (${compareDateTime})`,
+            field: colId,
+            minWidth: 120,
+            valueGetter: params => {
+              const dtRow = dtById.get((params.data as AdvancedStationData).id);
+              const raw = (dtRow as unknown as Record<string, Record<string, unknown>>)?.['status_data']?.[key];
+              if (!isNumeric) return (raw ?? '') as unknown;
+              const num = Number(raw);
+              if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+              return Math.round(num * 100) / 100;
+            },
+            valueFormatter: isNumeric ? (params => {
+              if (params.value === null || params.value === undefined) return '';
+              const num = Number(params.value);
+              if (Number.isNaN(num)) return '';
+              return Number.isInteger(num) ? `${num}` : num.toFixed(2);
+            }) : undefined,
+            comparator: isNumeric ? createNumericComparator() : undefined,
+            filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+            filterParams: { buttons: ['reset', 'apply'] },
+          });
+        }
+      }
+      for (const key of Object.keys(columnStructure.measurements_data)) {
+        const colId = `history_measurements_data.${key}`;
+        if (historySelectedColumns.has(colId)) {
+          const isNumeric = isColumnNumeric('measurements_data', key);
+          columns.push({
+            headerName: `Measurements: ${key} (${compareDateTime})`,
+            field: colId,
+            minWidth: 120,
+            valueGetter: params => {
+              const dtRow = dtById.get((params.data as AdvancedStationData).id);
+              const raw = (dtRow as unknown as Record<string, Record<string, unknown>>)?.['measurements_data']?.[key];
+              if (!isNumeric) return (raw ?? '') as unknown;
+              const num = Number(raw);
+              if (raw === null || raw === undefined || raw === '' || Number.isNaN(num)) return null;
+              return Math.round(num * 100) / 100;
+            },
+            valueFormatter: isNumeric ? (params => {
+              if (params.value === null || params.value === undefined) return '';
+              const num = Number(params.value);
+              if (Number.isNaN(num)) return '';
+              return num.toFixed(2);
+            }) : undefined,
+            comparator: isNumeric ? createNumericComparator() : undefined,
+            filter: isNumeric ? 'agNumberColumnFilter' : 'agTextColumnFilter',
+            filterParams: { buttons: ['reset', 'apply'] },
+          });
+        }
+      }
+    }
+
     return columns;
-  }, [selectedColumns, columnStructure, stationData, isMobile, addBasicColumns, addStationInfoColumns, addHealthColumns, addDynamicDataColumns]);
+  }, [selectedColumns, historySelectedColumns, columnStructure, stationData, isMobile, addBasicColumns, addStationInfoColumns, addHealthColumns, addDynamicDataColumns, includeDateTimeCompare, compareDateTime, dateTimeData, isColumnNumeric, createNumericComparator, createDateFilterParams]);
 
   // Update column pinning when mobile state changes
   useEffect(() => {
@@ -1013,14 +1448,20 @@ export default function AdvancedTable({
                             { id: 'longitude', label: 'Longitude' },
                             { id: 'altitude', label: 'Altitude' },
                             { id: 'county', label: 'County' },
-                            { id: 'ip_address', label: 'IP Address' },
+                            { id: 'ip_modem_http', label: 'IP Modem (HTTP)' },
+                            { id: 'ip_modem_https', label: 'IP Modem (HTTPS)' },
+                            { id: 'ip_datalogger_pakbus', label: 'IP Datalogger (PakBus)' },
+                            { id: 'ip_datalogger_http', label: 'IP Datalogger (HTTP)' },
                             { id: 'sms_number', label: 'SMS Number' },
                             { id: 'online_24h_avg', label: 'Online 24h Avg' },
-                            { id: 'online_7d_avg', label: 'Online 7d Avg' },
                             { id: 'online_24h_graph', label: 'Online 24h Graph' },
+                            { id: 'online_7d_avg', label: 'Online 7d Avg' },
+                            { id: 'online_7d_graph', label: 'Online 7d Graph' },
                             { id: 'online_last_seen', label: 'Online Last Seen' },
                             { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
+                            { id: 'data_health_24h_graph', label: 'Data Health 24h Graph' },
                             { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
+                            { id: 'data_health_7d_graph', label: 'Data Health 7d Graph' },
                           ].map(({ id, label }) => (
                             <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
                               <input
@@ -1380,7 +1821,11 @@ export default function AdvancedTable({
                             { id: 'latitude', label: 'Latitude' },
                             { id: 'longitude', label: 'Longitude' },
                             { id: 'altitude', label: 'Altitude' },
-                            { id: 'ip_address', label: 'IP Address' },
+                            { id: 'county', label: 'County' },
+                            { id: 'ip_modem_http', label: 'IP Modem (HTTP)' },
+                            { id: 'ip_modem_https', label: 'IP Modem (HTTPS)' },
+                            { id: 'ip_datalogger_pakbus', label: 'IP Datalogger (PakBus)' },
+                            { id: 'ip_datalogger_http', label: 'IP Datalogger (HTTP)' },
                             { id: 'sms_number', label: 'SMS Number' },
                             { id: 'online_24h_avg', label: 'Online 24h Avg' },
                             { id: 'online_7d_avg', label: 'Online 7d Avg' },
@@ -1534,6 +1979,197 @@ export default function AdvancedTable({
 
                     {/* Measurements Group */}
                     <div>
+                    {/* History Groups (mobile) */}
+                    {includeDateTimeCompare && compareDateTime && dateTimeData.length > 0 && (
+                      <>
+                        {/* History Public Data */}
+                        {Object.keys(columnStructure.public_data).length > 0 && (
+                          <div className="border-b border-gray-200">
+                            <button
+                              onClick={(e) => {
+                                if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                                  return;
+                                }
+                                handleGroupClick('history-public-data');
+                              }}
+                              className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-400">
+                                  {expandedGroup === 'history-public-data' ? '▼' : '▶'}
+                                </span>
+                                <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                                  <ThreeStateCheckbox
+                                    state={getHistoryGroupState('history-public-data')}
+                                    onChange={(checked) => {
+                                      toggleHistoryColumnGroup('history-public-data', checked);
+                                    }}
+                                  />
+                                </div>
+                                <span className="font-medium text-gray-700">🌐 Public Data ({compareDateTime})</span>
+                              </div>
+                            </button>
+                            {expandedGroup === 'history-public-data' && (
+                              <div className="px-2 pb-2 space-y-1">
+                                <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={historySelectedColumns.has('history_public_timestamp')}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleHistoryColumnVisibility('history_public_timestamp', e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span className="font-medium">📅 Timestamp</span>
+                                </label>
+                                {Object.keys(columnStructure.public_data).map(key => {
+                                  const colId = `history_public_data.${key}`;
+                                  return (
+                                    <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                      <input
+                                        type="checkbox"
+                                        checked={historySelectedColumns.has(colId)}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          toggleHistoryColumnVisibility(colId, e.target.checked);
+                                        }}
+                                        className="rounded border-gray-300"
+                                      />
+                                      <span>{key}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* History Status Data */}
+                        {Object.keys(columnStructure.status_data).length > 0 && (
+                          <div className="border-b border-gray-200">
+                            <button
+                              onClick={(e) => {
+                                if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                                  return;
+                                }
+                                handleGroupClick('history-status-data');
+                              }}
+                              className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-400">
+                                  {expandedGroup === 'history-status-data' ? '▼' : '▶'}
+                                </span>
+                                <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                                  <ThreeStateCheckbox
+                                    state={getHistoryGroupState('history-status-data')}
+                                    onChange={(checked) => {
+                                      toggleHistoryColumnGroup('history-status-data', checked);
+                                    }}
+                                  />
+                                </div>
+                                <span className="font-medium text-gray-700">📊 Status Data ({compareDateTime})</span>
+                              </div>
+                            </button>
+                            {expandedGroup === 'history-status-data' && (
+                              <div className="px-2 pb-2 space-y-1">
+                                <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={historySelectedColumns.has('history_status_timestamp')}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleHistoryColumnVisibility('history_status_timestamp', e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span className="font-medium">📅 Timestamp</span>
+                                </label>
+                                {Object.keys(columnStructure.status_data).map(key => {
+                                  const colId = `history_status_data.${key}`;
+                                  return (
+                                    <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                      <input
+                                        type="checkbox"
+                                        checked={historySelectedColumns.has(colId)}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          toggleHistoryColumnVisibility(colId, e.target.checked);
+                                        }}
+                                        className="rounded border-gray-300"
+                                      />
+                                      <span>{key}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {/* History Measurements */}
+                        {Object.keys(columnStructure.measurements_data).length > 0 && (
+                          <div className="border-b border-gray-200">
+                            <button
+                              onClick={(e) => {
+                                if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                                  return;
+                                }
+                                handleGroupClick('history-measurements');
+                              }}
+                              className="w-full p-2 text-left hover:bg-gray-50 flex items-center justify-between"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <span className="text-gray-400">
+                                  {expandedGroup === 'history-measurements' ? '▼' : '▶'}
+                                </span>
+                                <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                                  <ThreeStateCheckbox
+                                    state={getHistoryGroupState('history-measurements')}
+                                    onChange={(checked) => {
+                                      toggleHistoryColumnGroup('history-measurements', checked);
+                                    }}
+                                  />
+                                </div>
+                                <span className="font-medium text-gray-700">📋 Measurements ({compareDateTime})</span>
+                              </div>
+                            </button>
+                            {expandedGroup === 'history-measurements' && (
+                              <div className="px-2 pb-2 space-y-1">
+                                <label className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                  <input
+                                    type="checkbox"
+                                    checked={historySelectedColumns.has('history_measurements_timestamp')}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      toggleHistoryColumnVisibility('history_measurements_timestamp', e.target.checked);
+                                    }}
+                                    className="rounded border-gray-300"
+                                  />
+                                  <span className="font-medium">📅 Timestamp</span>
+                                </label>
+                                {Object.keys(columnStructure.measurements_data).map(key => {
+                                  const colId = `history_measurements_data.${key}`;
+                                  return (
+                                    <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-4">
+                                      <input
+                                        type="checkbox"
+                                        checked={historySelectedColumns.has(colId)}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          toggleHistoryColumnVisibility(colId, e.target.checked);
+                                        }}
+                                        className="rounded border-gray-300"
+                                      />
+                                      <span>{key}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
                       <button
                         onClick={(e) => {
                           if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
@@ -1674,7 +2310,7 @@ export default function AdvancedTable({
             style={{ height: 'calc(100vh - 320px)' }}
           >
             <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
-              <h3 className="font-medium text-gray-900">Column Visibility</h3>
+              <h3 className="font-medium text-gray-900">Show Columns</h3>
               <button
                 onClick={() => setShowColumnSelector(false)}
                 className="text-gray-400 hover:text-gray-600 text-lg leading-none"
@@ -1699,7 +2335,11 @@ export default function AdvancedTable({
               </button>
             </div>
           </div>
-          
+          <div className="p-4 border-b border-gray-200 bg-gray-100 flex-shrink-0">
+            <div className="flex gap-2 text-gray-500 text-sm">
+              Latest data
+            </div>
+          </div>
           <div className="flex-1 overflow-y-auto">
             {/* Station Group */}
             <div className="border-b border-gray-200">
@@ -1737,14 +2377,20 @@ export default function AdvancedTable({
                     { id: 'longitude', label: 'Longitude' },
                     { id: 'altitude', label: 'Altitude' },
                     { id: 'county', label: 'County' },
-                    { id: 'ip_address', label: 'IP Address' },
+                    { id: 'ip_modem_http', label: 'IP Modem (HTTP)' },
+                    { id: 'ip_modem_https', label: 'IP Modem (HTTPS)' },
+                    { id: 'ip_datalogger_pakbus', label: 'IP Datalogger (PakBus)' },
+                    { id: 'ip_datalogger_http', label: 'IP Datalogger (HTTP)' },
                     { id: 'sms_number', label: 'SMS Number' },
                     { id: 'online_24h_avg', label: 'Online 24h Avg' },
-                    { id: 'online_7d_avg', label: 'Online 7d Avg' },
                     { id: 'online_24h_graph', label: 'Online 24h Graph' },
+                    { id: 'online_7d_avg', label: 'Online 7d Avg' },
+                    { id: 'online_7d_graph', label: 'Online 7d Graph' },
                     { id: 'online_last_seen', label: 'Online Last Seen' },
                     { id: 'data_health_24h_avg', label: 'Data Health 24h Avg' },
+                    { id: 'data_health_24h_graph', label: 'Data Health 24h Graph' },
                     { id: 'data_health_7d_avg', label: 'Data Health 7d Avg' },
+                    { id: 'data_health_7d_graph', label: 'Data Health 7d Graph' },
                   ].map(({ id, label }) => (
                     <label key={id} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
                       <input
@@ -1958,6 +2604,217 @@ export default function AdvancedTable({
                 </div>
               )}
             </div>
+            <div className="p-4 border-b border-gray-200 bg-gray-100 flex-shrink-0">
+              <div className="flex gap-2">
+                {/* Datetime selector and history/newest toggles */}
+                <input
+                  type="datetime-local"
+                  className="px-3 py-1.5 text-xs border border-gray-300 rounded text-gray-500"
+                  value={compareDateTime}
+                  onChange={(e) => setCompareDateTime(e.target.value)}
+                />
+                <label className="flex items-center gap-2 text-xs text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
+                    checked={includeDateTimeCompare}
+                    onChange={(e) => setIncludeDateTimeCompare(e.target.checked)}
+                  />
+                  History data
+                </label>
+              </div>
+            </div>
+            {/* History Groups (desktop) */}
+            {includeDateTimeCompare && compareDateTime && dateTimeData.length > 0 && (
+              <>
+                {/* History Public Data */}
+                {Object.keys(columnStructure.public_data).length > 0 && (
+                  <div className="border-b border-gray-200">
+                    <button
+                      onClick={(e) => {
+                        if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                          return;
+                        }
+                        handleGroupClick('history-public-data');
+                      }}
+                      className="w-full p-4 text-left hover:bg-gray-50 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="text-gray-400">
+                          {expandedGroup === 'history-public-data' ? '▼' : '▶'}
+                        </span>
+                        <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                          <ThreeStateCheckbox
+                            state={getHistoryGroupState('history-public-data')}
+                            onChange={(checked) => {
+                              toggleHistoryColumnGroup('history-public-data', checked);
+                            }}
+                          />
+                        </div>
+                        <span className="font-medium text-gray-700">🌐 Public Data ({compareDateTime})</span>
+                      </div>
+                    </button>
+                    {expandedGroup === 'history-public-data' && (
+                      <div className="px-4 pb-4 space-y-2">
+                        <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                          <input
+                            type="checkbox"
+                            checked={historySelectedColumns.has('history_public_timestamp')}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleHistoryColumnVisibility('history_public_timestamp', e.target.checked);
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="font-medium">📅 Timestamp</span>
+                        </label>
+                        {Object.keys(columnStructure.public_data).map(key => {
+                          const colId = `history_public_data.${key}`;
+                          return (
+                            <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={historySelectedColumns.has(colId)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleHistoryColumnVisibility(colId, e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{key}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* History Status Data */}
+                {Object.keys(columnStructure.status_data).length > 0 && (
+                  <div className="border-b border-gray-200">
+                    <button
+                      onClick={(e) => {
+                        if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                          return;
+                        }
+                        handleGroupClick('history-status-data');
+                      }}
+                      className="w-full p-4 text-left hover:bg-gray-50 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="text-gray-400">
+                          {expandedGroup === 'history-status-data' ? '▼' : '▶'}
+                        </span>
+                        <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                          <ThreeStateCheckbox
+                            state={getHistoryGroupState('history-status-data')}
+                            onChange={(checked) => {
+                              toggleHistoryColumnGroup('history-status-data', checked);
+                            }}
+                          />
+                        </div>
+                        <span className="font-medium text-gray-700">📊 Status Data ({compareDateTime})</span>
+                      </div>
+                    </button>
+                    {expandedGroup === 'history-status-data' && (
+                      <div className="px-4 pb-4 space-y-2">
+                        <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                          <input
+                            type="checkbox"
+                            checked={historySelectedColumns.has('history_status_timestamp')}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleHistoryColumnVisibility('history_status_timestamp', e.target.checked);
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="font-medium">📅 Timestamp</span>
+                        </label>
+                        {Object.keys(columnStructure.status_data).map(key => {
+                          const colId = `history_status_data.${key}`;
+                          return (
+                            <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={historySelectedColumns.has(colId)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleHistoryColumnVisibility(colId, e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{key}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* History Measurements */}
+                {Object.keys(columnStructure.measurements_data).length > 0 && (
+                  <div className="border-b border-gray-200">
+                    <button
+                      onClick={(e) => {
+                        if (e.target instanceof HTMLElement && e.target.closest('.three-state-checkbox')) {
+                          return;
+                        }
+                        handleGroupClick('history-measurements');
+                      }}
+                      className="w-full p-4 text-left hover:bg-gray-50 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="text-gray-400">
+                          {expandedGroup === 'history-measurements' ? '▼' : '▶'}
+                        </span>
+                        <div className="three-state-checkbox" onClick={(e) => e.stopPropagation()}>
+                          <ThreeStateCheckbox
+                            state={getHistoryGroupState('history-measurements')}
+                            onChange={(checked) => {
+                              toggleHistoryColumnGroup('history-measurements', checked);
+                            }}
+                          />
+                        </div>
+                        <span className="font-medium text-gray-700">📋 Measurements ({compareDateTime})</span>
+                      </div>
+                    </button>
+                    {expandedGroup === 'history-measurements' && (
+                      <div className="px-4 pb-4 space-y-2">
+                        <label className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                          <input
+                            type="checkbox"
+                            checked={historySelectedColumns.has('history_measurements_timestamp')}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleHistoryColumnVisibility('history_measurements_timestamp', e.target.checked);
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="font-medium">📅 Timestamp</span>
+                        </label>
+                        {Object.keys(columnStructure.measurements_data).map(key => {
+                          const colId = `history_measurements_data.${key}`;
+                          return (
+                            <label key={colId} className="flex items-center space-x-2 text-sm text-gray-600 ml-6">
+                              <input
+                                type="checkbox"
+                                checked={historySelectedColumns.has(colId)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  toggleHistoryColumnVisibility(colId, e.target.checked);
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <span>{key}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1980,11 +2837,14 @@ export default function AdvancedTable({
             animateRows={false}
             // Rows are not clickable; only Name column is clickable via cellRenderer
             suppressMenuHide={true}
+            headerHeight={64}
             defaultColDef={{
               filter: true,
               sortable: true,
               resizable: true,
               floatingFilter: true,
+              wrapHeaderText: true,
+              headerClass: 'wrap-anywhere',
             }}
             enableBrowserTooltips={true}
           />

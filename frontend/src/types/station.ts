@@ -56,6 +56,7 @@ export interface HourlyAvgHealth {
   hourly_data_health: number[]
   hourly_network_health: number[]
   hourly_avg_online_count: number[]
+  hourly_avg_offline_count: number[]
   hour_labels: string[]
 }
 
@@ -78,7 +79,10 @@ export interface AdvancedStationData {
   latitude?: number
   longitude?: number
   altitude?: number
-  ip: string
+  ip_modem_http: string
+  ip_modem_https: string
+  ip_datalogger_pakbus: string
+  ip_datalogger_http: string
   sms_number?: string
   county?: string
   
@@ -86,7 +90,12 @@ export interface AdvancedStationData {
   avg_fetch_health_7d: number
   avg_fetch_health_24h: number
   hourly_status: number[]
+  hourly_data_status: number[]
   hourly_timestamps: string[]
+  // 7d status arrays for extended graph
+  hourly_status_7d: number[]
+  hourly_data_status_7d: number[]
+  hourly_timestamps_7d: string[]
   avg_data_health_7d: number
   avg_data_health_24h: number
   

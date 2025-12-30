@@ -5,6 +5,7 @@ interface TimelineCellProps {
   timestamps?: string[];
   BarWidth?: number;
   maxBarHeight?: number;
+  maxBars?: number; // default 24
 }
 
 const MIN_BAR_HEIGHT = 4;
@@ -20,7 +21,7 @@ function getColor(value: number): string {
   return `rgb(${red}, ${green}, 0)`;
 }
 
-const TimelineCell: React.FC<TimelineCellProps> = ({ value, timestamps, BarWidth, maxBarHeight }) => {
+const TimelineCell: React.FC<TimelineCellProps> = ({ value, timestamps, BarWidth, maxBarHeight, maxBars = 24 }) => {
   if (value === 'Error') {
     return <div style={{ color: 'darkred' }}>Error</div>;
   }
@@ -29,10 +30,11 @@ const TimelineCell: React.FC<TimelineCellProps> = ({ value, timestamps, BarWidth
   }
 
   if (Array.isArray(value)) {
+    const target = Math.max(1, maxBars);
     const padded = [
       ...value,
-      ...Array(Math.max(0, 24 - value.length)).fill(0)
-    ].slice(-24);
+  ...new Array(Math.max(0, target - value.length)).fill(0)
+    ].slice(-target);
 
     return (
       <div
@@ -65,7 +67,7 @@ const TimelineCell: React.FC<TimelineCellProps> = ({ value, timestamps, BarWidth
                     opacity: v === null ? 0.25 : 1,
                     transition: 'height .2s',
                 }}
-                title={`${timestamp}: ${v !== null ? v.toFixed(0) + '%' : 'n/a'}`}
+                title={`${timestamp}: ${v === null ? 'n/a' : v.toFixed(0) + '%'}`}
                 />
             );
         })}
