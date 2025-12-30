@@ -115,7 +115,7 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ station, hourlyData }) => {
     } else {
       // Split on colon; last segment is port for typical "ip:port"
       const parts = raw.split(':');
-      if (parts.length > 1) port = parts[parts.length - 1];
+      if (parts.length > 1) port = parts.at(-1) ?? null;
     }
 
     // Known secure ports
