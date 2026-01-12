@@ -8,7 +8,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { showDatabaseTime } from '@/utils/timezoneHelpers';
 
 const PERIOD_MS = 5000; // 5s
-const TTL_SECONDS = 10;   // cache TTL on backend
+const TTL_SECONDS = 5;   // cache TTL on backend
 
 const PublicLiveTab: React.FC = () => {
   const params = useParams<{ stationId: string }>();
@@ -89,7 +89,7 @@ const PublicLiveTab: React.FC = () => {
         const next = Array.isArray(data.data) ? data.data : [];
         setData(next);
       } catch {
-        if (!cancelled) setError('Failed to load live public data');
+        if (!cancelled) setError('No public data available...');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -200,9 +200,11 @@ const PublicLiveTab: React.FC = () => {
       )}
 
       {data.map((row) => (
-        <div className={`kv-row ${highlightKeys.has(row.key) ? 'changed' : ''}`} key={row.key}>
+        <div className="kv-row" key={row.key}>
           <span className="kv-key">{row.key}</span>
-          <span className="kv-value">{row.value}</span>
+          <span className="kv-value">
+            <span className={`kv-value-highlight ${highlightKeys.has(row.key) ? 'changed' : ''}`}>{row.value}</span>
+          </span>
         </div>
       ))}
 
@@ -223,8 +225,13 @@ const PublicLiveTab: React.FC = () => {
           background-color: transparent;
           transition: background-color 0.6s ease;
         }
-        .kv-row.changed {
-          background-color: #fff8d6; /* light yellowish */
+        /* Only highlight the changed value's background, not the whole row */
+        .kv-value-highlight.changed {
+          display: inline;
+          background-color: #fceb94; /* light yellow */
+          padding: 0 4px;
+          border-radius: 3px;
+          transition: background-color 0.6s ease;
         }
         .kv-key {
           font-weight: 500;

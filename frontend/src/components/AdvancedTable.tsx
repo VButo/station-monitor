@@ -566,33 +566,88 @@ export default function AdvancedTable({
 
       if (!visibleColumns?.length) return;
 
-      // Add headers
-      const headers = visibleColumns.map(col => col.headerName || col.field || '');
+      // Add header row (using headers from visible columns)
+      const headers = visibleColumns.map((col) => col.headerName || col.field || '');
       worksheet.addRow(headers);
 
-      // Get displayed data (respects filters)
+      // Get displayed data (respects filters & sort)
       const rowData: AdvancedStationData[] = [];
       gridApi.forEachNodeAfterFilterAndSort((node) => {
         if (node.data) rowData.push(node.data);
       });
 
-      // Add data rows
-      for (const row of rowData) {
-        const rowValues = visibleColumns.map(col => {
-          const field = col.field;
-          if (!field) return '';
-          
-          let value = (row as unknown as Record<string, unknown>)[field];
-          
-          // Handle nested object fields
-          if (field.includes('.')) {
-            const parts = field.split('.');
-            value = (row as unknown as Record<string, Record<string, unknown>>)[parts[0]]?.[parts[1]];
+      // Build column metadata including type detection against displayed data
+      const columnMeta = visibleColumns.map((col) => {
+        const field = col.field as string;
+        const header = col.headerName || field || '';
+        let dataKey = field;
+        let nestedKey: string | undefined;
+        if (field.includes('.')) {
+          const parts = field.split('.');
+          dataKey = parts[0];
+          nestedKey = parts[1];
+        }
+
+        // Detect if column is numeric by scanning displayed rows
+        let numeric = false;
+        let hasDecimal = false;
+        for (const r of rowData) {
+          const sample = nestedKey
+            ? (r as unknown as Record<string, Record<string, unknown>>)[dataKey]?.[nestedKey]
+            : (r as unknown as Record<string, unknown>)[dataKey];
+          if (sample !== undefined && sample !== null && sample !== '' && !Array.isArray(sample) && sample !== 'NaN') {
+            const n = Number(sample);
+            if (!Number.isNaN(n)) {
+              numeric = true;
+              if (!Number.isInteger(n)) { hasDecimal = true; }
+            }
           }
-          
-          return value ?? '';
+        }
+        // Choose a number format for Excel
+        let numFmt: string | undefined;
+        if (numeric) {
+          if (field === 'latitude' || field === 'longitude') {
+            numFmt = '0.000000';
+          } else {
+            numFmt = hasDecimal ? '0.00' : '0';
+          }
+        }
+        return { field, header, dataKey, nestedKey, numeric, numFmt };
+      });
+
+      // Add data rows with explicit typing
+      for (const row of rowData) {
+        const values = columnMeta.map((m) => {
+          let value: unknown;
+          if (m.nestedKey) {
+            value = (row as unknown as Record<string, Record<string, unknown>>)[m.dataKey]?.[m.nestedKey];
+          } else {
+            value = (row as unknown as Record<string, unknown>)[m.dataKey];
+          }
+
+          if (m.numeric) {
+            const n = Number(value);
+            return Number.isFinite(n) ? n : null; // keep non-numeric as empty
+          }
+          // For text cells, avoid dumping raw objects as [object Object]
+          if (value == null) return '';
+          const t = typeof value;
+          if (t === 'string' || t === 'number' || t === 'boolean') return String(value);
+          return '';
         });
-        worksheet.addRow(rowValues);
+
+        const addedRow = worksheet.addRow(values);
+        // Force text formatting for non-numeric columns so Excel treats them as Text
+        addedRow.eachCell((cell, colNumber) => {
+          const meta = columnMeta[colNumber - 1];
+          if (addedRow.number !== 1) {
+            if (!meta.numeric) {
+              cell.numFmt = '@';
+            } else if (meta.numFmt) {
+              cell.numFmt = meta.numFmt;
+            }
+          }
+        });
       }
 
       // Style headers
@@ -604,14 +659,25 @@ export default function AdvancedTable({
         fgColor: { argb: 'FFE0E0E0' }
       };
 
-      // Auto-fit columns
-      for (const [index, column] of worksheet.columns.entries()) {
-        const header = headers[index];
+      // Apply column-level numeric formats so Excel shows Number format
+      columnMeta.forEach((meta, idx) => {
+        if (meta.numeric && meta.numFmt) {
+          const col = worksheet.getColumn(idx + 1);
+          // Set column number format (header will remain styled as text)
+          (col as unknown as { numFmt?: string }).numFmt = meta.numFmt;
+        }
+      });
+
+      // Auto-fit columns based on header length
+      if (worksheet.columns) {
+        for (const [index, column] of worksheet.columns.entries()) {
+          const header = columnMeta[index]?.header;
         const maxLength = Math.max(
           header?.length || 0,
           15 // minimum width
         );
-        column.width = Math.min(maxLength * 1.2, 50); // max width of 50
+          column.width = Math.min(maxLength * 1.2, 50); // max width of 50
+        }
       }
 
       // Generate and download file
@@ -2618,8 +2684,7 @@ export default function AdvancedTable({
                     type="checkbox"
                     className="rounded border-gray-300"
                     checked={includeDateTimeCompare}
-                    onChange={(e) => setIncludeDateTimeCompare(e.target.checked)}
-                  />
+                    onChange={(e) => setIncludeDateTimeCompare(e.target.checked)}/>
                   History data
                 </label>
               </div>

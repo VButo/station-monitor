@@ -86,11 +86,14 @@ export async function readStationTable(
     undefined;
   const port: string | number | undefined = station.datalogger_http_port ?? undefined;
 
-  const urlHost: string | undefined = station.ip_datalogger_http
-    ? station.ip_datalogger_http
-    : host && port !== undefined
-    ? `${host}:${port}`
-    : host;
+  let urlHost: string | undefined;
+  if (station.ip_datalogger_http) {
+    urlHost = station.ip_datalogger_http;
+  } else if (host && port !== undefined) {
+    urlHost = `${host}:${port}`;
+  } else {
+    urlHost = host;
+  }
 
   if (!urlHost) {
     return { ok: false, table: tableName, error: "No station host/port available" };
