@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { getStations, getFieldNames, getStationById, fetchStationStatus, getAverageStatus, getAdvancedStationData, getPublicTableWithDatetime, getStatusTableWithDatetime, getMeasurementsTableWithDatetime, getStationOverviewData, getHourlyAverageFetchHealth, getHourlyAverageFetchHealth7d, getStationsTable, getStationsTableWithDatetime } from '../controllers/stationController';
+import { getStations, getFieldNames, getStationById, fetchStationStatus, getAverageStatus, getAdvancedStationData, getAdvancedStationDataDateTime, getStationOverviewData, getHourlyAverageFetchHealth, getHourlyAverageFetchHealth7d, getStationsTable, getStationsTableWithDatetime } from '../controllers/stationController';
 import { validateRequest } from '../middleware/validateRequest';
 
 const router = Router();
@@ -23,6 +23,12 @@ const datetimeQuerySchema = z.object({
 	),
 });
 
+const datetimeParamSchema = z.object({
+	datetime: z.string()
+		.min(1, 'datetime is required')
+		.refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid datetime format. Expected ISO string.'),
+});
+
 router.get('/', getStations);
 router.get('/get-names', getFieldNames)
 router.get('/station-status', fetchStationStatus);
@@ -31,12 +37,11 @@ router.get('/hourly-average-fetch-health', getHourlyAverageFetchHealth);
 router.get('/hourly-average-fetch-health-7d', getHourlyAverageFetchHealth7d);
 router.get('/average-status', getAverageStatus);
 router.get('/advanced-table', getAdvancedStationData);
+// Datetime variant via query parameter (preferred)
+router.get('/advanced-table-datetime', validateRequest({ query: datetimeQuerySchema }), getAdvancedStationDataDateTime);
 router.get('/stations-table/:id/:tableNameId', validateRequest({ params: tableParamsSchema }), getStationsTable);
 router.get('/table-datetime/:id/:tableNameId',  validateRequest({ params: tableParamsSchema, query: datetimeQuerySchema }), getStationsTableWithDatetime);
 // New datetime-enabled routes - these accept datetime as query parameter
-router.get('/public-table-datetime/:id', validateRequest({ params: idParamSchema, query: datetimeQuerySchema }), getPublicTableWithDatetime);
-router.get('/status-table-datetime/:id', validateRequest({ params: idParamSchema, query: datetimeQuerySchema }), getStatusTableWithDatetime);
-router.get('/measurements-table-datetime/:id', validateRequest({ params: idParamSchema, query: datetimeQuerySchema }), getMeasurementsTableWithDatetime);
 router.get('/:id', validateRequest({ params: idParamSchema }), getStationById);
 
 export default router;

@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import type { Station, SmsMessage } from '@/types/station'
+import api from '@/utils/api'
 
 interface Props {
   station?: Station | null
@@ -26,22 +27,15 @@ export default function ModemTab(props: Readonly<Props>) {
   }, [userMap])
 
   const callBackendSend = async (number: string, text: string, stationId?: number) => {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api'
     try {
       type SendPayload = { number: string; message: string; station_id?: number }
       const bodyPayload: SendPayload = { number, message: text }
       if (typeof stationId === 'number') bodyPayload.station_id = stationId
-      const resp = await fetch(`${apiBase}/sms/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(bodyPayload),
-      })
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}))
-        return { ok: false, url: body.url ?? null, error: body.error ?? `HTTP ${resp.status}` }
-      }
-      const body = await resp.json()
+      const resp = await api.post<{ success: boolean; url?: string | null; error?: string | null }>(
+        '/sms/send',
+        bodyPayload
+      )
+      const body = resp.data || {}
       return { ok: body.success === true, url: body.url ?? null, error: body.error ?? null }
     } catch (err) {
       return { ok: false, url: null, error: err instanceof Error ? err.message : String(err) }
@@ -53,19 +47,15 @@ export default function ModemTab(props: Readonly<Props>) {
     if (!station?.id) return
 
     let mounted = true
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api'
     const ac = new AbortController()
 
-  const fetchMissingUsernames = async (userIds: string[]) => {
+    const fetchMissingUsernames = async (userIds: string[]) => {
       try {
-        const resp = await fetch(`${apiBase}/sms/usernames`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ userIds }),
-          signal: ac.signal,
-        })
-        const jb = await resp.json().catch(() => null)
+        const resp = await api.post<{ success: boolean; data?: Record<string, string | null> }>(
+          '/sms/usernames',
+          { userIds }
+        )
+        const jb = resp.data || null
         if (jb?.success && jb.data) {
           setUserMap((prev) => {
             const merged = { ...prev, ...jb.data }
@@ -82,11 +72,10 @@ export default function ModemTab(props: Readonly<Props>) {
 
     const fetchMessages = async () => {
       try {
-        const r = await fetch(`${apiBase}/sms/station/${station.id}`, {
-          signal: ac.signal,
-          credentials: 'include',
-        })
-        const body = await r.json().catch(() => null)
+        const resp = await api.get<{ success: boolean; data: SmsMessage[] }>(
+          `/sms/station/${station.id}`
+        )
+        const body = resp.data || null
         if (!mounted) return
         if (body?.success && Array.isArray(body.data)) {
           mergeMessages(body.data)

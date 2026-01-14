@@ -12,6 +12,7 @@ export async function smsRecieved(req: Request, res: Response) {
         if (!number || !message) {
             return res.status(400).json({ error: 'Missing number or message in request body' });
         }
+        console.log("Recieved SMS:", number, "with message:", message);
         const responseMessage = await smsService.smsRecieved(number, message);
         try {
             const io = getIo()

@@ -142,82 +142,6 @@ export async function getStationsTableWithDatetime(req: Request, res: Response) 
   }
 }
 
-// New datetime-enabled table functions
-export async function getPublicTableWithDatetime(req: Request, res: Response) {
-  try {
-    const id = Number((res.locals as any).validatedParams?.id ?? req.params.id);
-    const datetime = ((res.locals as any).validatedQuery?.datetime ?? req.query.datetime) as string;
-    
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
-    if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
-    
-    // Validate datetime format
-    const parsedDatetime = new Date(datetime);
-    if (Number.isNaN(parsedDatetime.getTime())) {
-      return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
-    }
-    
-    const data = await stationService.getPublicTableWithDatetime(id, parsedDatetime);
-    res.json(data);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-}
-
-export async function getStatusTableWithDatetime(req: Request, res: Response) {
-  try {
-    const id = Number((res.locals as any).validatedParams?.id ?? req.params.id);
-    const datetime = ((res.locals as any).validatedQuery?.datetime ?? req.query.datetime) as string;
-
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
-    if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
-    
-    // Validate datetime format
-    const parsedDatetime = new Date(datetime);
-    if (Number.isNaN(parsedDatetime.getTime())) {
-      return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
-    }
-    
-    const data = await stationService.getStatusTableWithDatetime(id, parsedDatetime);
-    res.json(data);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-}
-
-export async function getMeasurementsTableWithDatetime(req: Request, res: Response) {
-  try {
-    const id = Number((res.locals as any).validatedParams?.id ?? req.params.id);
-    const datetime = ((res.locals as any).validatedQuery?.datetime ?? req.query.datetime) as string;
-
-    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid station ID' });
-    if (!datetime) return res.status(400).json({ error: 'Datetime parameter is required' });
-    
-    // Validate datetime format
-    const parsedDatetime = new Date(datetime);
-    if (Number.isNaN(parsedDatetime.getTime())) {
-      return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
-    }
-    
-    const data = await stationService.getMeasurementsTableWithDatetime(id, parsedDatetime);
-    res.json(data);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-}
-
 export async function getStations(req: Request, res: Response) {
   const stations = await stationService.fetchStations();
   res.json(stations);
@@ -241,6 +165,7 @@ export async function getStationById(req: Request, res: Response) {
   if (!station) return res.status(404).json({ error: 'Not found' });
   res.json(station);
 }
+
 
 export async function getAdvancedStationData(req: Request, res: Response) {
   try {
@@ -274,6 +199,35 @@ export async function getAdvancedStationData(req: Request, res: Response) {
     logger.error('Error serving advanced station data', { error });
     res.status(500).json({ 
       error: 'Failed to retrieve advanced station data',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}
+
+// New: Advanced station data at a specific datetime
+export async function getAdvancedStationDataDateTime(req: Request, res: Response) {
+  try {
+    const datetimeStr = (req.params as any).datetime || (req.query as any).datetime;
+    console.log("Received datetime parameter:", datetimeStr);
+    if (!datetimeStr) {
+      return res.status(400).json({ error: 'Datetime parameter is required' });
+    }
+    const parsedDatetime = new Date(String(datetimeStr));
+    if (Number.isNaN(parsedDatetime.getTime())) {
+      return res.status(400).json({ error: 'Invalid datetime format. Expected ISO string.' });
+    }
+
+    const data = await stationService.fetchAdvancedStationDataAtDatetime(parsedDatetime);
+    // Cache headers
+    res.set({
+      'Cache-Control': 'public, max-age=120',
+      'ETag': `"advanced-data-${parsedDatetime.toISOString()}"`,
+    });
+    return res.json(data);
+  } catch (error) {
+    logger.error('Error serving advanced station data at datetime', { error });
+    res.status(500).json({
+      error: 'Failed to retrieve advanced station data at datetime',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

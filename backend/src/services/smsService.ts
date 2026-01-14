@@ -56,10 +56,9 @@ export async function insertOutgoingSms(row: SmsRow) {
     // The database stores sms_status as an enum of string labels. Convert
     // numeric codes to their enum names when writing to avoid Postgres errors
     // (22P02 invalid input value for enum).
-    status: (function convertStatus(s?: number | undefined) {
-      const code = s ?? 2;
+    status: (function convertStatus(s: number = 2) {
       // mapping: 1=INBOX, 2=OUTBOX, 3=SENT, 4=UNSENT
-      switch (Number(code)) {
+      switch (Number(s)) {
         case 1:
           return 'INBOX';
         case 3:

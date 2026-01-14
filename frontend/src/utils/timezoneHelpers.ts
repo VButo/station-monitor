@@ -87,6 +87,42 @@ export function showDatabaseTimeAsUTC1(timestamp: string) {
   };
 }
 
+export function showDatabaseTime(timestamp: string) {
+  // Parse the timestamp and treat it as the correct UTC+1 time
+  const dbDate = new Date(timestamp);
+  
+  // Create a date that represents the same "wall clock" time but in UTC+1
+  const utc1Time = new Date(dbDate);
+  
+  const correctedDate = new Date(dbDate);
+
+  return {
+    // Show exactly what's in the database as UTC+1
+    displayTime: utc1Time.toLocaleString('en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: 'UTC'
+    }).replace(',', ''),
+    
+    displayWithTimezone: `${utc1Time.toLocaleString('en-GB', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: 'UTC'
+    }).replace(',', '')} (UTC+1)`,
+    
+    // For time ago calculations, use the original database time
+    dateForCalculations: correctedDate
+  };
+}
+
 /**
  * Converts user-selected Croatian time to database search time
  * User selects Croatian local time (UTC+2) but wants to search for UTC+1 data

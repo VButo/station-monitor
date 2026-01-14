@@ -122,8 +122,8 @@ const OverviewPageSkeleton = () => {
 
 interface ChartDataPoint {
   timestamp: number;
-  online: number;
-  offline: number;
+  online: number | null;
+  offline: number | null;
 }
 
 interface HealthChartDataPoint {
@@ -135,7 +135,7 @@ interface HealthChartDataPoint {
 
 // Type for ApexCharts tooltip parameters
 interface TooltipParams {
-  series: number[][];
+  series: (number | null | undefined)[][];
   seriesIndex: number;
   dataPointIndex: number;
   w: {
@@ -148,15 +148,29 @@ interface TooltipParams {
 // Process online data for the chart (uses aggregated arrays returned by the DB)
 const processOnlineData = (data: OnlineData[]): ChartDataPoint[] => {
   if (!Array.isArray(data) || data.length === 0) return [];
-  const first = data[0] as OnlineData;
-  const values = Array.isArray(first.hourly_avg_online_count) ? first.hourly_avg_online_count : [];
+  const first = data[0];
+  const onlineValues = Array.isArray(first.hourly_avg_online_count) ? first.hourly_avg_online_count : [];
+  const offlineValuesSrc = first as unknown as { hourly_avg_offline_count?: number[] };
+
+  const offlineValues = Array.isArray(offlineValuesSrc.hourly_avg_offline_count) ? offlineValuesSrc.hourly_avg_offline_count : [];
   const labels = Array.isArray(first.hour_labels) ? first.hour_labels : [];
 
-  const minLen = Math.min(values.length, labels.length);
+  const minLen = offlineValues.length > 0
+    ? Math.min(onlineValues.length, offlineValues.length, labels.length)
+    : Math.min(onlineValues.length, labels.length);
+
   const result: ChartDataPoint[] = [];
   for (let i = 0; i < minLen; i++) {
-    const online = Math.round(Number.isFinite(values[i]) ? values[i] : 0);
-    result.push({ timestamp: new Date(labels[i]).getTime(), online, offline: 0 });
+    const o = onlineValues[i];
+    const f = offlineValues[i];
+    const hasO = Number.isFinite(o);
+    const hasF = Number.isFinite(f);
+    const timestamp = new Date(labels[i]).getTime();
+    result.push({
+      timestamp,
+      online: hasO ? Math.round(o) : null,
+      offline: hasF ? Math.round(f) : null
+    });
   }
 
   result.sort((a, b) => a.timestamp - b.timestamp);
@@ -166,7 +180,7 @@ const processOnlineData = (data: OnlineData[]): ChartDataPoint[] => {
 // Process health data for the chart using aggregated arrays returned by the DB
 const processHealthData = (data: OnlineData[]): HealthChartDataPoint[] => {
   if (!Array.isArray(data) || data.length === 0) return [];
-  const first = data[0] as OnlineData;
+  const first = data[0];
   const values = Array.isArray(first.hourly_data_health) ? first.hourly_data_health : [];
   const mins = Array.isArray(first.hourly_data_health_min) ? first.hourly_data_health_min : [];
   const maxs = Array.isArray(first.hourly_data_health_max) ? first.hourly_data_health_max : [];
@@ -345,6 +359,7 @@ function OverviewPageContent() {
                 hourly_data_health: (first['hourly_data_health'] as number[] | undefined) ?? [],
                 hourly_network_health: first['hourly_network_health'] as number[],
                 hourly_avg_online_count: (first['hourly_avg_online_count'] as number[] | undefined) ?? [],
+                hourly_avg_offline_count: (first['hourly_avg_offline_count'] as number[] | undefined) ?? [],
                 hour_labels: first['hour_labels'] as string[]
               });
             } else if (first && Array.isArray(first['hourly_avg_online_count']) && Array.isArray(first['hour_labels'])) {
@@ -354,6 +369,7 @@ function OverviewPageContent() {
                 hourly_data_health: (first['hourly_data_health'] as number[] | undefined) ?? [],
                 hourly_network_health: (first['hourly_network_health'] as number[] | undefined) ?? [],
                 hourly_avg_online_count: (first['hourly_avg_online_count'] as number[] | undefined) ?? [],
+                hourly_avg_offline_count: (first['hourly_avg_offline_count'] as number[] | undefined) ?? [],
                 hour_labels: first['hour_labels'] as string[]
               });
             } else {
@@ -509,13 +525,24 @@ function OverviewPageContent() {
   const chartSeries = useMemo(() => {
     // If the backend returned aggregated hourly averages (avgFetchData), prefer that
     if (avgFetchData && Array.isArray(avgFetchData.hourly_avg_online_count) && Array.isArray(avgFetchData.hour_labels)) {
-      const values = avgFetchData.hourly_avg_online_count as number[];
-      const labels = avgFetchData.hour_labels as string[];
-      const minLen = Math.min(values.length, labels.length);
-      const totalStations = overviewData.length || 0;
+      const onlineValues = avgFetchData.hourly_avg_online_count;
+      const offlineValues = avgFetchData.hourly_avg_offline_count;
+      const labels = avgFetchData.hour_labels;
+      const minLen = offlineValues.length > 0
+        ? Math.min(onlineValues.length, offlineValues.length, labels.length)
+        : Math.min(onlineValues.length, labels.length);
 
-      const onlineSerie = values.slice(0, minLen).map((v, i) => ({ x: new Date(labels[i]).getTime(), y: Number.isFinite(v) ? Math.round(v) : 0 }));
-      const offlineSerie = values.slice(0, minLen).map((v, i) => ({ x: new Date(labels[i]).getTime(), y: Math.max(0, totalStations - Math.round(Number.isFinite(v) ? v : 0)) }));
+      const onlineSerie: { x: number; y: number | null }[] = [];
+      const offlineSerie: { x: number; y: number | null }[] = [];
+      for (let i = 0; i < minLen; i++) {
+        const o = onlineValues[i];
+        const f = offlineValues.length > 0 ? offlineValues[i] : undefined;
+        const hasO = Number.isFinite(o);
+        const hasF = f !== undefined && Number.isFinite(f);
+        const x = new Date(labels[i]).getTime();
+        onlineSerie.push({ x, y: hasO ? Math.round(o) : null });
+        offlineSerie.push({ x, y: hasF ? Math.round(Number(f)) : null });
+      }
 
       return [
         { name: 'Online', data: onlineSerie },
@@ -536,7 +563,7 @@ function OverviewPageContent() {
     ];
 
     return series;
-  }, [chartData, avgFetchData, overviewData.length]);
+  }, [chartData, avgFetchData]);
 
   // Health chart configuration (memoized)
   const healthChartSeries = useMemo(() => {
@@ -563,8 +590,8 @@ function OverviewPageContent() {
       return [];
     }
 
-    const values = avgFetchData.hourly_network_health as number[];
-    const labels = avgFetchData.hour_labels as string[];
+  const values = avgFetchData.hourly_network_health;
+  const labels = avgFetchData.hour_labels;
     const min = Math.min(values.length, labels.length);
     const series = [{
       name: 'Connection Health',
@@ -642,29 +669,48 @@ function OverviewPageContent() {
       // Custom styling to make text gray-500
       custom: function({ series, seriesIndex, dataPointIndex, w }: TooltipParams) {
         const date = new Date(w.globals.seriesX[seriesIndex][dataPointIndex]);
-        const onlineValue = series[0][dataPointIndex] || 0;
-        const offlineValue = series[1][dataPointIndex] || 0;
-        
+        const vOnline = series?.[0]?.[dataPointIndex];
+        const vOffline = series?.[1]?.[dataPointIndex];
+        const hasOnline = vOnline !== null && vOnline !== undefined && Number.isFinite(Number(vOnline));
+        const hasOffline = vOffline !== null && vOffline !== undefined && Number.isFinite(Number(vOffline));
+
+        const header = `
+          <div class="text-xs mb-2" style="color: #6B7280;">
+            ${date.toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </div>
+        `;
+
+        if (!hasOnline && !hasOffline) {
+          return `
+            <div class="bg-white border border-gray-200 rounded-lg shadow-lg p-3" style="font-family: inherit;">
+              ${header}
+              <div class="text-sm" style="color: #6B7280;">No data</div>
+            </div>
+          `;
+        }
+
+        const onlineRow = hasOnline ? `
+          <div class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full" style="background-color: #4ADE80;"></div>
+            <span class="text-sm" style="color: #6B7280;">Online: ${Math.round(Number(vOnline))}</span>
+          </div>
+        ` : '';
+        const offlineRow = hasOffline ? `
+          <div class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full" style="background-color: #F87171;"></div>
+            <span class="text-sm" style="color: #6B7280;">Offline: ${Math.round(Number(vOffline))}</span>
+          </div>
+        ` : '';
+
         return `
           <div class="bg-white border border-gray-200 rounded-lg shadow-lg p-3" style="font-family: inherit;">
-            <div class="text-xs mb-2" style="color: #6B7280;">
-              ${date.toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </div>
-            <div class="space-y-1">
-              <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full" style="background-color: #4ADE80;"></div>
-                <span class="text-sm" style="color: #6B7280;">Online: ${onlineValue}</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <div class="w-2 h-2 rounded-full" style="background-color: #F87171;"></div>
-                <span class="text-sm" style="color: #6B7280;">Offline: ${offlineValue}</span>
-              </div>
-            </div>
+            ${header}
+            <div class="space-y-1">${onlineRow}${offlineRow}</div>
           </div>
         `;
       }
@@ -897,7 +943,7 @@ function OverviewPageContent() {
   // Icons for stats cards
 
   return (
-    <div className="h-full bg-gray-50 pt-4">
+    <div className="min-h-full bg-gray-50 pt-4">
       <div className="max-w-5xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Network Overview</h1>

@@ -49,6 +49,12 @@ export async function fetchStationStatus() {
   return data;
 }
 
+export async function fetchStationStatus7d() {
+  const { data, error } = await rpcClient.rpc('get_station_hourly_health_7d');
+  if (error) throw error;
+  return data;
+}
+
 // Helper: map RPC key-value rows to human-friendly keys using field_names
 export function mapStationRows(data: any[], fieldNames: any[]) {
   // Build lookup map: field_id -> field metadata
@@ -173,111 +179,6 @@ export async function getStationTableWithDatetime(id:number, tableNameId:number,
   }
 }
 
-// New datetime-enabled table functions
-export async function getPublicTableWithDatetime(id: number, datetime: Date) {
-  try {
-    logger.info('Fetching public table window', {
-      stationId: id,
-      endTime: datetime.toISOString(),
-    });
-    
-    const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
-    
-    const { data, error } = await rpcClient.rpc('get_collector_data_kv_public_datetime', { 
-      _station_id: id, 
-      _datetime: dateTime.toISOString()
-    });
-    
-    if (error) {
-      logger.error('Error fetching public table window', {
-        stationId: id,
-        timestamp: dateTime.toISOString(),
-        error,
-      });
-      throw error;
-    }
-    
-    logger.info('Fetched public table window', {
-      stationId: id,
-      timestamp: dateTime.toISOString(),
-      records: data?.length ?? 0,
-    });
-    return data || [];
-  } catch (err) {
-    logger.error('Failed to fetch public table window', { stationId: id, error: err });
-    return [];
-  }
-}
-
-export async function getStatusTableWithDatetime(id: number, datetime: Date) {
-  try {
-    logger.info('Fetching status table window', {
-      stationId: id,
-      endTime: datetime.toISOString(),
-    });
-
-    const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
-    
-    const { data, error } = await rpcClient.rpc('get_collector_data_kv_status_datetime', { 
-      _station_id: id, 
-      _datetime: dateTime.toISOString()
-    });
-    
-    if (error) {
-      logger.error('Error fetching status table window', {
-        stationId: id,
-        timestamp: dateTime.toISOString(),
-        error,
-      });
-      throw error;
-    }
-    logger.info('Fetched status table window', {
-      stationId: id,
-      timestamp: dateTime.toISOString(),
-      records: data?.length ?? 0,
-    });
-    return data || [];
-  } catch (err) {
-    logger.error('Failed to fetch status table window', { stationId: id, error: err });
-    return [];
-  }
-}
-
-export async function getMeasurementsTableWithDatetime(id: number, datetime: Date) {
-  try {
-    logger.info('Fetching measurements table window', {
-      stationId: id,
-      endTime: datetime.toISOString(),
-    });
-    
-    // Calculate start datetime (10 minutes before the provided datetime)
-    const dateTime = new Date(datetime.getTime() - 1 * 60 * 60 * 1000);
-
-    const { data, error } = await rpcClient.rpc('get_collector_data_kv_measurements_datetime', { 
-      _station_id: id, 
-      _datetime: dateTime.toISOString()
-    });
-    if (error) {
-      logger.error('Error fetching measurements table window', {
-        stationId: id,
-        timestamp: dateTime.toISOString(),
-        error,
-      });
-      throw error;
-    }
-    
-    logger.info('Fetched measurements table window', {
-      stationId: id,
-      timestamp: dateTime.toISOString(),
-      records: data?.length ?? 0,
-    });
-    return data || [];
-  } catch (err) {
-    logger.error('Failed to fetch measurements table window', { stationId: id, error: err });
-    return [];
-  }
-}
-
 export async function fetchStations() {
   const { data, error } = await rpcClient.from('stations').select('*').order('id', { ascending: true });
   if (error) throw error;
@@ -315,13 +216,15 @@ export async function fetchAdvancedStationData() {
   logger.info('Fetched stations count', { count: stations.length });
 
     // Fetch status metadata (small set) first
-    const [stationStatuses, avgStatuses] = await Promise.all([
+    const [stationStatuses, avgStatuses, stationStatuses7d ] = await Promise.all([
       fetchStationStatus(),
-      getAverageStatus()
+      getAverageStatus(),
+      fetchStationStatus7d()
     ]);
     logger.info('Fetched status data', {
       stationStatuses: stationStatuses.length,
-      avgStatuses: avgStatuses.length
+      avgStatuses: avgStatuses.length,
+      stationStatuses7d: stationStatuses7d.length
     });
 
     // Concurrency control: limit number of stations processed in parallel
@@ -360,7 +263,9 @@ export async function fetchAdvancedStationData() {
 
         // Find corresponding status data
         const hourlyStatus = stationStatuses.find((s: any) => s._station_id === station.id);
+        const hourlyStatus7d = stationStatuses7d.find((s: any) => s._station_id === station.id);
         const avgStatus = avgStatuses.find((s: any) => s.station_id === station.id);
+        
 
         return {
           // Basic station info
@@ -373,14 +278,21 @@ export async function fetchAdvancedStationData() {
           longitude: station.longitude,
           altitude: station.altitude,
           county: station.county,
-          ip: station.ip,
+          ip_modem_http: station.ip_modem_http,
+          ip_modem_https: station.ip_modem_https,
+          ip_datalogger_pakbus: station.ip_datalogger_pakbus,
+          ip_datalogger_http: station.ip_datalogger_http,
           sms_number: station.sms_number,
 
           // Status data
           avg_fetch_health_7d: avgStatus?.avg_network_health_7d || 0,
           avg_fetch_health_24h: avgStatus?.avg_network_health_24h || 0,
           hourly_status: hourlyStatus?.hourly_network_health || [],
+          hourly_data_status: hourlyStatus?.hourly_data_health || [],
           hourly_timestamps: hourlyStatus?.hour_bucket_local || [],
+          hourly_status_7d: hourlyStatus7d?.hourly_network_health || [],
+          hourly_data_status_7d: hourlyStatus7d?.hourly_data_health || [],
+          hourly_timestamps_7d: hourlyStatus7d?.hour_bucket_local || [],
           avg_data_health_7d: avgStatus?.avg_data_health_7d || 0,
           avg_data_health_24h: avgStatus?.avg_data_health_24h || 0,
 
@@ -480,6 +392,139 @@ export async function fetchAdvancedStationData() {
     };
   } catch (error) {
     logger.error('Error fetching advanced station data', { error });
+    throw error;
+  }
+}
+
+// Fetch advanced station data snapshot at a specific datetime
+export async function fetchAdvancedStationDataAtDatetime(datetime: Date) {
+  try {
+    logger.info('Starting fetchAdvancedStationDataAtDatetime', { datetime: datetime.toISOString() });
+
+    const connectionOk = await testDatabaseConnection();
+    if (!connectionOk) {
+      throw new Error('Database connection failed');
+    }
+
+    const stations = await fetchStations();
+
+    // Limit concurrency to avoid overloading DB
+    const concurrencyLimit = Number.parseInt(process.env.ADVANCED_FETCH_CONCURRENCY || '5', 10) || 5;
+    const advancedData: any[] = [];
+
+    async function processStationAtTime(station: any) {
+      try {
+        const [publicData, statusData, measurementsData] = await Promise.all([
+          getStationTableWithDatetime(station.id, 1, datetime).catch(() => []),
+          getStationTableWithDatetime(station.id, 2, datetime).catch(() => []),
+          getStationTableWithDatetime(station.id, 3, datetime).catch(() => []),
+        ]);
+
+        return {
+          id: station.id,
+          label: station.label,
+          label_id: station.label_id,
+          label_name: station.label_name,
+          label_type: station.label_type,
+          latitude: station.latitude,
+          longitude: station.longitude,
+          altitude: station.altitude,
+          county: station.county,
+          ip_modem_http: station.ip_modem_http,
+          ip_modem_https: station.ip_modem_https,
+          ip_datalogger_pakbus: station.ip_datalogger_pakbus,
+          ip_datalogger_http: station.ip_datalogger_http,
+          sms_number: station.sms_number,
+
+          // Keep status health static for now (at current time)
+          avg_fetch_health_7d: 0,
+          avg_fetch_health_24h: 0,
+          hourly_status: [],
+          hourly_timestamps: [],
+          avg_data_health_7d: 0,
+          avg_data_health_24h: 0,
+
+          public_data: keyValueArrayToObject(publicData),
+          public_timestamp: publicData[0]?.station_timestamp,
+          status_data: keyValueArrayToObject(statusData),
+          status_timestamp: statusData[0]?.station_timestamp,
+          measurements_data: keyValueArrayToObject(measurementsData),
+          measurements_timestamp: measurementsData[0]?.station_timestamp,
+
+          last_updated: datetime.toISOString(),
+          total_measurements: measurementsData.length,
+        };
+      } catch (error) {
+        logger.error('Error fetching data for station at datetime', { stationId: station.id, datetime: datetime.toISOString(), error });
+        return {
+          id: station.id,
+          label: station.label,
+          label_id: station.label_id,
+          label_name: station.label_name,
+          label_type: station.label_type,
+          latitude: station.latitude,
+          longitude: station.longitude,
+          altitude: station.altitude,
+          county: station.county,
+          ip_modem_http: station.ip_modem_http,
+          ip_modem_https: station.ip_modem_https,
+          ip_datalogger_pakbus: station.ip_datalogger_pakbus,
+          ip_datalogger_http: station.ip_datalogger_http,
+          sms_number: station.sms_number,
+          avg_fetch_health_7d: 0,
+          avg_data_health_7d: 0,
+          avg_fetch_health_24h: 0,
+          avg_data_health_24h: 0,
+          hourly_status: [],
+          public_data: {},
+          status_data: {},
+          measurements_data: {},
+          last_updated: datetime.toISOString(),
+          total_measurements: 0,
+        };
+      }
+    }
+
+    for (let i = 0; i < stations.length; i += concurrencyLimit) {
+      const chunk = stations.slice(i, i + concurrencyLimit);
+      const chunkResults = await Promise.all(chunk.map(processStationAtTime));
+      advancedData.push(...chunkResults);
+    }
+
+    // Build column templates based on keys present in this snapshot
+    const publicKeys = new Set<string>();
+    const statusKeys = new Set<string>();
+    const measurementKeys = new Set<string>();
+    for (const station of advancedData) {
+      for (const key of Object.keys(station.public_data)) publicKeys.add(key);
+      for (const key of Object.keys(station.status_data)) statusKeys.add(key);
+      for (const key of Object.keys(station.measurements_data)) measurementKeys.add(key);
+    }
+
+    const publicTemplate: Record<string, string> = {};
+    const statusTemplate: Record<string, string> = {};
+    const measurementsTemplate: Record<string, string> = {};
+    for (const key of publicKeys) publicTemplate[key] = '';
+    for (const key of statusKeys) statusTemplate[key] = '';
+    for (const key of measurementKeys) measurementsTemplate[key] = '';
+
+    return {
+      stations: advancedData,
+      columnStructure: {
+        public_data: publicTemplate,
+        status_data: statusTemplate,
+        measurements_data: measurementsTemplate,
+      },
+      metadata: {
+        publicKeys: Array.from(publicKeys).sort((a, b) => a.localeCompare(b)),
+        statusKeys: Array.from(statusKeys).sort((a, b) => a.localeCompare(b)),
+        measurementKeys: Array.from(measurementKeys).sort((a, b) => a.localeCompare(b)),
+        totalStations: advancedData.length,
+        generatedAt: datetime.toISOString(),
+      },
+    };
+  } catch (error) {
+    logger.error('Error fetching advanced station data at datetime', { error, datetime: datetime.toISOString() });
     throw error;
   }
 }

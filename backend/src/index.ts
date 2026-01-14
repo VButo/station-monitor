@@ -5,16 +5,20 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { initSocket } from './utils/socket'
 import { logger } from './utils/logger';
+import { requestContextMiddleware } from './utils/requestContext';
 import stationRoutes from './routes/stationRoutes';
 import userRoutes from './routes/userRoutes';
 import smsRoutes from './routes/smsRoutes';
+import smsPublicRoutes from './routes/smsPublicRoutes';
 import overviewRoutes from './routes/overviewRoutes';
+import liveRoutes from './routes/liveRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { advancedDataScheduler } from './services/schedulerService';
 import { advancedStationDataCache } from './services/cacheService';
+import { liveDataScheduler } from './services/liveSchedulerService';
 import { authMiddleware } from './middleware/authMiddleware';
 
 const app = express();
@@ -27,6 +31,9 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', requestId);
   next();
 });
+
+// Attach request context for per-route logging
+app.use(requestContextMiddleware);
 
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
@@ -89,6 +96,7 @@ app.get('/healthz', (_req, res) => {
 });
 
 const shouldRunScheduler = process.env.RUN_SCHEDULER !== 'false';
+const shouldRunLiveScheduler = process.env.RUN_LIVE_SCHEDULER !== 'false';
 
 app.get('/readyz', (_req, res) => {
   const schedulerStatus = advancedDataScheduler.getStatus();
@@ -115,8 +123,11 @@ protectedApi.use(requireAuth);
 protectedApi.use('/stations', stationRoutes);
 protectedApi.use('/sms', smsRoutes);
 protectedApi.use('/', overviewRoutes);
+protectedApi.use('/live', liveRoutes);
 
 app.use('/api/users', userRoutes);
+// Public inbound SMS webhook (no auth)
+app.use('/api/sms', smsPublicRoutes);
 app.use('/api', protectedApi);
 
 // Error handler
@@ -131,6 +142,14 @@ if (shouldRunScheduler) {
   advancedDataScheduler.start();
 } else {
   logger.warn('RUN_SCHEDULER=false; skipping advanced data scheduler start.');
+}
+
+// Start live data scheduler for per-station cache warming
+if (shouldRunLiveScheduler) {
+  logger.info('Starting live data scheduler...');
+  liveDataScheduler.start();
+} else {
+  logger.warn('RUN_LIVE_SCHEDULER=false; skipping live data scheduler start.');
 }
 
 const server = app.listen(PORT, HOST, () => {
@@ -161,6 +180,9 @@ function shutdown(signal: string) {
   try {
     if (shouldRunScheduler) {
       try { advancedDataScheduler.stop() } catch (e) { logger.warn('Failed stopping scheduler', { error: e }) }
+    }
+    if (shouldRunLiveScheduler) {
+      try { liveDataScheduler.stop() } catch (e) { logger.warn('Failed stopping live scheduler', { error: e }) }
     }
     server.close((err?: Error) => {
       if (err) {

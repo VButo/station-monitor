@@ -47,7 +47,10 @@ function useIsMobile(): boolean {
 }
 
 function formatPercent(value: number | null | undefined): string {
-  return value === null || value === undefined ? '' : `${value}%`;
+  if (value === null || value === undefined) return '';
+  const num = Number(value);
+  if (Number.isNaN(num)) return '';
+  return `${(Math.round(num * 100) / 100).toFixed(2)}%`;
 }
 
 function createColumnDefs(isMobile: boolean, onRowClick: (stationId: string) => void): ColDef<RowData>[] {
@@ -251,7 +254,7 @@ export default function StationTable({ rowData, onRowClick }: StationTableProps)
           <div 
             className="ag-theme-alpine" 
             style={{ 
-              height: '64vh', 
+              height: 'calc(100vh - 320px)', 
               minWidth: isMobile ? '800px' : '600px',
               width: isMobile ? 'max-content' : '100%'
             }}

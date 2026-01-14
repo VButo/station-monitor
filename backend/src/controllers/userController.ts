@@ -18,7 +18,7 @@ const baseCookieOptions = (req: Request): CookieOptions => {
     : 'lax';
 
   // Determine request origin/host to tailor cookie security & domain
-  const origin = (req.headers.origin as string | undefined) || '';
+  const origin = (typeof req.headers.origin === 'string' ? req.headers.origin : '') || '';
   let hostname = req.hostname;
   try {
     if (origin) hostname = new URL(origin).hostname;
@@ -45,12 +45,12 @@ const baseCookieOptions = (req: Request): CookieOptions => {
   // For local HTTP dev, relax to SameSite=Lax and Secure=false so cookie is accepted.
   let secure = configuredSecure;
   if (sameSite === 'none') {
-    if (!isHttps) {
+    if (isHttps) {
+      secure = true;
+    } else {
       // Dev over HTTP: downgrade for compatibility
       sameSite = 'lax';
       secure = false;
-    } else {
-      secure = true;
     }
   }
 
